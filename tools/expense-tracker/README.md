@@ -8,6 +8,26 @@ Tuned for Indian alert formats: HDFC, ICICI (including Amazon Pay ICICI), SBI,
 Axis, Kotak, AU Small Finance, Federal/Jupiter, CSB, and UPI apps — with a
 generic fallback for templates not listed here.
 
+## Two sources, one ledger
+
+**Statements are the spine.** A bank or card statement (CSV/Excel) is complete,
+authoritative, and carries a running balance — which lets the import *prove*
+itself. `checkBalanceContinuity()` walks consecutive rows and confirms that
+`previous balance − debit + credit = next balance` for every one. If that holds
+throughout, no row was dropped, duplicated or misread. Where it breaks, the row
+is named. No message-based import can offer that guarantee.
+
+Statement layouts differ per bank and bury the real header under preamble rows,
+so nothing is hard-coded: `detectLayout()` scores candidate header rows, maps
+columns by name, and reports when it is not confident, so the mapping can be
+corrected before anything is imported.
+
+**Alert messages fill the gaps** for accounts you have not pulled a statement
+for. When both sources describe the same payment, the statement wins — see
+`dedupe()`, which matches across sources on the bank reference OR on
+date + amount + account, because one source may know a reference the other does
+not. A category you corrected by hand survives the replacement.
+
 ## Why it parses the way it does
 
 Banks change their SMS templates constantly, and the same bank words UPI, card
@@ -36,13 +56,14 @@ what is not there.
 ## Layout
 
 ```
+src/statement.js   statement layout detection, narration parsing, balance proof
 src/parse.js       field extractors + issuer/noise rules  -> one message to one record
 src/categorize.js  merchant -> category, plus learned user overrides
 src/normalize.js   dedupe, reversals, month aggregation, recurring detection
 src/ui.js          the interface
 src/page.html      markup, design tokens, and the bundle placeholder
 build.mjs          inlines the modules into dist/tracker.html (artifacts are one file)
-test/              42 tests over the parser and the ledger
+test/              58 tests over the parsers, the ledger and the balance check
 ```
 
 The modules are the single source of truth: node runs them directly for tests,
@@ -51,7 +72,7 @@ and `build.mjs` flattens them into the published page.
 ## Use
 
 ```sh
-npm test     # 42 tests, no dependencies
+npm test     # 58 tests, no dependencies
 npm run build # -> dist/tracker.html, a self-contained page
 ```
 

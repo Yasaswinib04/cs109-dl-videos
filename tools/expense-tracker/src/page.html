@@ -1,6 +1,7 @@
 <title>Passbook</title>
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&family=Instrument+Serif:ital@0;1&display=swap">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <style>
 /* Light is the base set; the two blocks after it only redefine tokens, so the
    un-stamped (system-default) viewer gets a complete palette either way. */
@@ -168,6 +169,30 @@ textarea { width:100%; min-height:170px; background:var(--sunk); border:1px soli
 .how ol { margin:0; padding-left:18px; display:flex; flex-direction:column; gap:5px; }
 .how code { font-family:var(--mono); font-size:11.5px; background:var(--sunk); padding:1px 5px; border-radius:4px; }
 
+/* ---------- statement import ---------- */
+.step { margin-top:16px; }
+.map-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(150px,1fr)); gap:10px; margin:14px 0; }
+.map-grid label { display:flex; flex-direction:column; gap:4px; font-family:var(--mono); font-size:10px;
+  letter-spacing:.08em; text-transform:uppercase; color:var(--muted); }
+.map-grid select { width:100%; font-size:12.5px; padding:6px 8px; }
+.acct-row { display:flex; flex-wrap:wrap; gap:10px; align-items:flex-end; margin-bottom:6px; }
+.acct-row label { display:flex; flex-direction:column; gap:4px; font-family:var(--mono); font-size:10px;
+  letter-spacing:.08em; text-transform:uppercase; color:var(--muted); }
+.acct-row input { background:var(--surface-2); border:1px solid var(--line); border-radius:6px;
+  padding:6px 9px; font-size:13px; width:170px; }
+.check { border-radius:8px; padding:12px 14px; font-size:13px; margin:14px 0; border:1px solid; }
+.check-ok { background:color-mix(in srgb, var(--good) 9%, transparent);
+  border-color:color-mix(in srgb, var(--good) 35%, transparent); color:var(--ink); }
+.check-bad { background:color-mix(in srgb, var(--warn) 11%, transparent);
+  border-color:color-mix(in srgb, var(--warn) 42%, transparent); color:var(--ink); }
+.check-none { background:var(--sunk); border-color:var(--line); color:var(--ink-2); }
+.check strong { display:block; margin-bottom:3px; }
+.check ul { margin:8px 0 0; padding-left:18px; font-family:var(--mono); font-size:11.5px; color:var(--ink-2); }
+.preview { max-height:210px; overflow:auto; border:1px solid var(--line); border-radius:8px; }
+.preview table { font-size:11.5px; }
+.preview th, .preview td { padding:6px 10px; white-space:nowrap; }
+.preview th { position:sticky; top:0; background:var(--surface); }
+
 /* ---------- floating bits ---------- */
 #tip { position:fixed; z-index:60; transform:translate(-50%,-100%); background:var(--ink); color:var(--ground);
   font-family:var(--mono); font-size:11.5px; padding:5px 9px; border-radius:6px; pointer-events:none; white-space:nowrap; }
@@ -201,7 +226,7 @@ textarea { width:100%; min-height:170px; background:var(--sunk); border:1px soli
       <button class="tab" id="tab-trends" role="tab" aria-selected="false">Trends</button>
     </div>
     <select id="month-select" aria-label="Month to show"></select>
-    <button class="btn btn-primary" id="btn-import">Add messages</button>
+    <button class="btn btn-primary" id="btn-import">Import</button>
   </div>
 </header>
 
@@ -223,26 +248,29 @@ textarea { width:100%; min-height:170px; background:var(--sunk); border:1px soli
 <div class="drawer" id="drawer" hidden>
   <div class="drawer-card" role="dialog" aria-modal="true" aria-labelledby="drawer-title">
     <div class="drawer-head">
-      <h2 id="drawer-title">Add messages</h2>
+      <h2 id="drawer-title">Import transactions</h2>
       <button class="btn btn-sm btn-ghost" id="btn-close-drawer">Close</button>
     </div>
-    <p class="drawer-sub">Paste bank alerts, or drop in an SMS backup file. Duplicates are skipped, so pasting an overlapping batch is safe.</p>
+    <div id="paste-step">
+    <p class="drawer-sub">Load a bank or card statement (CSV or Excel) — the most complete source — or paste alert messages. Duplicates are skipped either way, so overlapping imports are safe.</p>
     <textarea id="paste-box" placeholder="Sent Rs.318.00 From HDFC Bank A/C x4417 To swiggy@ybl On 03-09-25 Ref 561203914477&#10;INR 2,499.00 spent using Amazon Pay ICICI Bank Card XX8802 on 05-09-25 on AMAZON&#10;&#10;One message per line, or separated by blank lines."></textarea>
     <div class="drawer-actions">
-      <button class="btn btn-primary" id="btn-parse">Read these messages</button>
-      <label class="file-label">Choose a backup file<input type="file" id="file-input" accept=".xml,.csv,.txt"></label>
+      <label class="file-label">Choose a statement or backup file<input type="file" id="file-input" accept=".csv,.xls,.xlsx,.xml,.txt"></label>
+      <button class="btn" id="btn-parse">Read pasted messages</button>
     </div>
-    <div id="import-summary"></div>
 
     <div class="how">
-      <h3>Getting your messages off an Android phone</h3>
+      <h3>Where to get a statement</h3>
       <ol>
-        <li>Install <strong>SMS Backup &amp; Restore</strong> from the Play Store.</li>
-        <li>Tap <em>Set up a backup</em>, turn <strong>Messages</strong> on and Call logs off.</li>
-        <li>Back up to the phone, then share the <code>sms-….xml</code> file to yourself.</li>
-        <li>Choose that file above — only received messages are read, and only ones that look like transactions are kept.</li>
+        <li><strong>ICICI</strong> — net banking → Bank Accounts → Statements → pick a date range → download as <code>.xls</code>.</li>
+        <li><strong>Credit cards</strong> — each issuer's net banking or app has a statement download; Excel or CSV beats PDF.</li>
+        <li>Statements carry a running balance, so this page can check every row adds up before it imports anything.</li>
+        <li>Messages still work: paste them above, or load an <code>sms-….xml</code> from SMS Backup &amp; Restore.</li>
       </ol>
     </div>
+    </div>
+
+    <div id="statement-step" class="step" hidden></div>
   </div>
 </div>
 

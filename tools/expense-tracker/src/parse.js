@@ -204,7 +204,9 @@ export function extractMerchant(text) {
 // ---------------------------------------------------------------- reference
 
 export function extractRef(text) {
-  const m = /\b(?:upi\s*)?(?:ref(?:erence)?|rrn|txn|transaction)\s*(?:no\.?|id|#)?\s*[:\-]?\s*([0-9]{6,20})\b/i.exec(text);
+  const m = /\b(?:upi\s*)?(?:ref(?:erence)?|rrn|txn|transaction)\s*(?:no\.?|id|#)?\s*[:\-]?\s*([0-9]{6,20})\b/i.exec(text)
+    // Some templates carry the reference bare: "UPI:307012345678".
+    || /\bupi\s*[:\-]\s*([0-9]{9,20})\b/i.exec(text);
   return m ? m[1] : null;
 }
 

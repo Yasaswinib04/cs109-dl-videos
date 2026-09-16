@@ -19,17 +19,75 @@ export function dedupeKey(t) {
   return `d:${t.date || '?'}|${t.amount}|${t.account || '?'}|${normKey(t.merchant)}`;
 }
 
+/**
+ * Every identity a transaction answers to. One record can be known by its
+ * reference in one source and only by date+amount in another, so matching on a
+ * single key would let the same payment through twice.
+ */
+export function dedupeKeys(t) {
+  const keys = [];
+  if (t.ref) keys.push(`ref:${t.ref}:${t.amount}`);
+  keys.push(`d:${t.date || '?'}|${t.amount}|${t.account || '?'}|${normKey(t.merchant)}`);
+  return keys;
+}
+
+/** Same money, same day, same account - used only to match ACROSS sources. */
+const crossKey = t => `x:${t.date || '?'}|${t.amount}|${t.account || '?'}`;
+
+/** Guard the cross-source match: two different payees are two transactions. */
+function merchantsCompatible(a, b) {
+  const x = normKey(a), y = normKey(b);
+  if (!x || !y) return true;
+  return x === y || x.includes(y) || y.includes(x);
+}
+
+/** Statements are complete and authoritative; an alert message is a notification
+ *  about the same event. When both describe one transaction, the statement wins. */
+const SOURCE_RANK = { statement: 3, manual: 2, sms: 1, undefined: 1 };
+const rankOf = t => SOURCE_RANK[t.source] ?? 1;
+
 export function dedupe(txns) {
-  const seen = new Map();
-  const kept = [];
+  const rows = new Map();        // id -> transaction
+  const claims = new Map();      // any key -> id
+  const cross = new Map();       // cross key -> { id, source }
+  const order = [];
   let duplicates = 0;
+
   for (const t of txns) {
-    const k = dedupeKey(t);
-    if (seen.has(k)) { duplicates++; continue; }
-    seen.set(k, true);
-    kept.push({ ...t, id: k });
+    const keys = dedupeKeys(t);
+    const xk = crossKey(t);
+
+    let id = keys.map(k => claims.get(k)).find(Boolean);
+    if (!id) {
+      const c = cross.get(xk);
+      // Only across sources: within one source, two like-sized payments on one
+      // day are two payments, not a duplicate.
+      if (c && c.source !== t.source && merchantsCompatible(t.merchant, rows.get(c.id)?.merchant)) id = c.id;
+    }
+
+    if (!id) {
+      id = keys[0];
+      rows.set(id, { ...t, id });
+      order.push(id);
+      for (const k of keys) claims.set(k, id);
+      cross.set(xk, { id, source: t.source });
+      continue;
+    }
+
+    duplicates++;
+    const existing = rows.get(id);
+    if (rankOf(t) > rankOf(existing)) {
+      // Keep any category the user already corrected on the row being replaced,
+      // and keep the id so earlier claims still resolve.
+      rows.set(id, {
+        ...t, id,
+        category: existing.categorySource === 'user' ? existing.category : t.category,
+        categorySource: existing.categorySource === 'user' ? 'user' : t.categorySource,
+      });
+    }
+    for (const k of keys) if (!claims.has(k)) claims.set(k, id);
   }
-  return { txns: kept, duplicates };
+  return { txns: order.map(k => rows.get(k)), duplicates };
 }
 
 /**

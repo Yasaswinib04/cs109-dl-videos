@@ -68,4 +68,8 @@ export function learnRule(rules, merchant, category) {
   return { ...rules, [key]: category };
 }
 
+/** Flat list of every seed needle - used to recognise a merchant inside a
+ *  statement narration, where the counterparty is one segment among many. */
+export const SEED_NEEDLES = SEED_RULES.flatMap(([, needles]) => needles).map(n => n.trim());
+
 export { normKey };

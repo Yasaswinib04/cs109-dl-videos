@@ -1,6 +1,7 @@
 <title>Passbook</title>
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&family=Instrument+Serif:ital@0;1&display=swap">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <style>
 /* Light is the base set; the two blocks after it only redefine tokens, so the
    un-stamped (system-default) viewer gets a complete palette either way. */
@@ -168,6 +169,30 @@ textarea { width:100%; min-height:170px; background:var(--sunk); border:1px soli
 .how ol { margin:0; padding-left:18px; display:flex; flex-direction:column; gap:5px; }
 .how code { font-family:var(--mono); font-size:11.5px; background:var(--sunk); padding:1px 5px; border-radius:4px; }
 
+/* ---------- statement import ---------- */
+.step { margin-top:16px; }
+.map-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(150px,1fr)); gap:10px; margin:14px 0; }
+.map-grid label { display:flex; flex-direction:column; gap:4px; font-family:var(--mono); font-size:10px;
+  letter-spacing:.08em; text-transform:uppercase; color:var(--muted); }
+.map-grid select { width:100%; font-size:12.5px; padding:6px 8px; }
+.acct-row { display:flex; flex-wrap:wrap; gap:10px; align-items:flex-end; margin-bottom:6px; }
+.acct-row label { display:flex; flex-direction:column; gap:4px; font-family:var(--mono); font-size:10px;
+  letter-spacing:.08em; text-transform:uppercase; color:var(--muted); }
+.acct-row input { background:var(--surface-2); border:1px solid var(--line); border-radius:6px;
+  padding:6px 9px; font-size:13px; width:170px; }
+.check { border-radius:8px; padding:12px 14px; font-size:13px; margin:14px 0; border:1px solid; }
+.check-ok { background:color-mix(in srgb, var(--good) 9%, transparent);
+  border-color:color-mix(in srgb, var(--good) 35%, transparent); color:var(--ink); }
+.check-bad { background:color-mix(in srgb, var(--warn) 11%, transparent);
+  border-color:color-mix(in srgb, var(--warn) 42%, transparent); color:var(--ink); }
+.check-none { background:var(--sunk); border-color:var(--line); color:var(--ink-2); }
+.check strong { display:block; margin-bottom:3px; }
+.check ul { margin:8px 0 0; padding-left:18px; font-family:var(--mono); font-size:11.5px; color:var(--ink-2); }
+.preview { max-height:210px; overflow:auto; border:1px solid var(--line); border-radius:8px; }
+.preview table { font-size:11.5px; }
+.preview th, .preview td { padding:6px 10px; white-space:nowrap; }
+.preview th { position:sticky; top:0; background:var(--surface); }
+
 /* ---------- floating bits ---------- */
 #tip { position:fixed; z-index:60; transform:translate(-50%,-100%); background:var(--ink); color:var(--ground);
   font-family:var(--mono); font-size:11.5px; padding:5px 9px; border-radius:6px; pointer-events:none; white-space:nowrap; }
@@ -201,7 +226,7 @@ textarea { width:100%; min-height:170px; background:var(--sunk); border:1px soli
       <button class="tab" id="tab-trends" role="tab" aria-selected="false">Trends</button>
     </div>
     <select id="month-select" aria-label="Month to show"></select>
-    <button class="btn btn-primary" id="btn-import">Add messages</button>
+    <button class="btn btn-primary" id="btn-import">Import</button>
   </div>
 </header>
 
@@ -223,26 +248,29 @@ textarea { width:100%; min-height:170px; background:var(--sunk); border:1px soli
 <div class="drawer" id="drawer" hidden>
   <div class="drawer-card" role="dialog" aria-modal="true" aria-labelledby="drawer-title">
     <div class="drawer-head">
-      <h2 id="drawer-title">Add messages</h2>
+      <h2 id="drawer-title">Import transactions</h2>
       <button class="btn btn-sm btn-ghost" id="btn-close-drawer">Close</button>
     </div>
-    <p class="drawer-sub">Paste bank alerts, or drop in an SMS backup file. Duplicates are skipped, so pasting an overlapping batch is safe.</p>
+    <div id="paste-step">
+    <p class="drawer-sub">Load a bank or card statement (CSV or Excel) — the most complete source — or paste alert messages. Duplicates are skipped either way, so overlapping imports are safe.</p>
     <textarea id="paste-box" placeholder="Sent Rs.318.00 From HDFC Bank A/C x4417 To swiggy@ybl On 03-09-25 Ref 561203914477&#10;INR 2,499.00 spent using Amazon Pay ICICI Bank Card XX8802 on 05-09-25 on AMAZON&#10;&#10;One message per line, or separated by blank lines."></textarea>
     <div class="drawer-actions">
-      <button class="btn btn-primary" id="btn-parse">Read these messages</button>
-      <label class="file-label">Choose a backup file<input type="file" id="file-input" accept=".xml,.csv,.txt"></label>
+      <label class="file-label">Choose a statement or backup file<input type="file" id="file-input" accept=".csv,.xls,.xlsx,.xml,.txt"></label>
+      <button class="btn" id="btn-parse">Read pasted messages</button>
     </div>
-    <div id="import-summary"></div>
 
     <div class="how">
-      <h3>Getting your messages off an Android phone</h3>
+      <h3>Where to get a statement</h3>
       <ol>
-        <li>Install <strong>SMS Backup &amp; Restore</strong> from the Play Store.</li>
-        <li>Tap <em>Set up a backup</em>, turn <strong>Messages</strong> on and Call logs off.</li>
-        <li>Back up to the phone, then share the <code>sms-….xml</code> file to yourself.</li>
-        <li>Choose that file above — only received messages are read, and only ones that look like transactions are kept.</li>
+        <li><strong>ICICI</strong> — net banking → Bank Accounts → Statements → pick a date range → download as <code>.xls</code>.</li>
+        <li><strong>Credit cards</strong> — each issuer's net banking or app has a statement download; Excel or CSV beats PDF.</li>
+        <li>Statements carry a running balance, so this page can check every row adds up before it imports anything.</li>
+        <li>Messages still work: paste them above, or load an <code>sms-….xml</code> from SMS Backup &amp; Restore.</li>
       </ol>
     </div>
+    </div>
+
+    <div id="statement-step" class="step" hidden></div>
   </div>
 </div>
 
@@ -457,7 +485,9 @@ function extractMerchant(text) {
 // ---------------------------------------------------------------- reference
 
 function extractRef(text) {
-  const m = /\b(?:upi\s*)?(?:ref(?:erence)?|rrn|txn|transaction)\s*(?:no\.?|id|#)?\s*[:\-]?\s*([0-9]{6,20})\b/i.exec(text);
+  const m = /\b(?:upi\s*)?(?:ref(?:erence)?|rrn|txn|transaction)\s*(?:no\.?|id|#)?\s*[:\-]?\s*([0-9]{6,20})\b/i.exec(text)
+    // Some templates carry the reference bare: "UPI:307012345678".
+    || /\bupi\s*[:\-]\s*([0-9]{9,20})\b/i.exec(text);
   return m ? m[1] : null;
 }
 
@@ -612,6 +642,335 @@ function learnRule(rules, merchant, category) {
   return { ...rules, [key]: category };
 }
 
+/** Flat list of every seed needle - used to recognise a merchant inside a
+ *  statement narration, where the counterparty is one segment among many. */
+const SEED_NEEDLES = SEED_RULES.flatMap(([, needles]) => needles).map(n => n.trim());
+
+
+
+/* ---- src/statement.js ---- */
+/**
+ * statement.js - read a bank or card statement into transactions.
+ *
+ * Statements beat alert messages on every axis that matters: they are complete
+ * (nothing depends on an SMS arriving), authoritative, and they carry a running
+ * balance, which lets us PROVE an import is correct rather than hope it is.
+ * See checkBalanceContinuity below - that check is the whole reason to prefer
+ * this path.
+ *
+ * The hard part is that no two banks agree on a layout, and most put several
+ * rows of preamble above the real header. So nothing here is hard-coded to one
+ * bank: we score candidate header rows, map columns by name, and hand the user
+ * the mapping to correct when scoring is not confident.
+ */
+
+
+/* ------------------------------------------------------------------ csv */
+
+/** Split CSV text into rows of cells. Handles quoted cells and embedded commas. */
+function parseCsv(text) {
+  const rows = [];
+  let row = [], cur = '', quoted = false;
+  const src = String(text).replace(/\r\n?/g, '\n');
+  for (let i = 0; i < src.length; i++) {
+    const c = src[i];
+    if (quoted) {
+      if (c === '"') { if (src[i + 1] === '"') { cur += '"'; i++; } else quoted = false; }
+      else cur += c;
+    } else if (c === '"') quoted = true;
+    else if (c === ',') { row.push(cur); cur = ''; }
+    else if (c === '\n') { row.push(cur); rows.push(row); row = []; cur = ''; }
+    else cur += c;
+  }
+  if (cur || row.length) { row.push(cur); rows.push(row); }
+  return rows.map(r => r.map(c => c.trim()));
+}
+
+/* ------------------------------------------------------------------ layout */
+
+/** Header names seen across Indian bank and card statements, by role. */
+const COLUMN_PATTERNS = {
+  date:      /^(transaction|txn|value|posting|tran\.?)?\s*date$|^date\b|^date of transaction/i,
+  narration: /narration|remarks|description|particulars|details|transaction remark|merchant|nature of transaction/i,
+  debit:     /withdrawal|^debit|debit amount|^dr\b|withdrawal amt|amount \(dr\)/i,
+  credit:    /deposit|^credit|credit amount|^cr\b|deposit amt|amount \(cr\)/i,
+  amount:    /^(transaction )?amount( \(inr\))?$|^amt$|^amount in inr$/i,
+  balance:   /balance|closing bal|available bal/i,
+  ref:       /cheque|ref(erence)?\s*(no|number)?|transaction id|txn id/i,
+};
+
+// "Withdrawal Amount (INR)" matches both `debit` and `amount`; the specific role wins.
+const ROLE_PRIORITY = ['date', 'balance', 'debit', 'credit', 'narration', 'ref', 'amount'];
+
+function scoreHeaderRow(cells) {
+  const roles = new Set();
+  for (const cell of cells) {
+    const v = String(cell || '').trim();
+    if (!v) continue;
+    for (const role of ROLE_PRIORITY) {
+      if (COLUMN_PATTERNS[role].test(v)) { roles.add(role); break; }
+    }
+  }
+  // A real header names a date and at least one money column.
+  if (!roles.has('date')) return { score: 0, roles };
+  if (!roles.has('debit') && !roles.has('credit') && !roles.has('amount')) return { score: 0, roles };
+  return { score: roles.size, roles };
+}
+
+/**
+ * Find the header row and map each role to a column index.
+ * Statements bury the header under account-holder and period rows, so we scan.
+ */
+function detectLayout(rows) {
+  let best = { score: 0, headerRow: -1 };
+  const limit = Math.min(rows.length, 30);
+  for (let i = 0; i < limit; i++) {
+    const { score } = scoreHeaderRow(rows[i]);
+    if (score > best.score) best = { score, headerRow: i };
+  }
+  if (best.headerRow === -1) return { headerRow: -1, map: {}, confident: false };
+
+  const header = rows[best.headerRow];
+  const map = {};
+  const taken = new Set();
+  // Where a statement carries several date columns, the transaction date is the
+  // one a person means; value date can differ by days.
+  const PREFERRED = { date: /transaction\s*date|txn\s*date/i };
+  for (const [role, pref] of Object.entries(PREFERRED)) {
+    for (let c = 0; c < header.length; c++) {
+      if (pref.test(String(header[c] || ''))) { map[role] = c; taken.add(c); break; }
+    }
+  }
+  for (const role of ROLE_PRIORITY) {
+    if (map[role] !== undefined) continue;
+    for (let c = 0; c < header.length; c++) {
+      if (taken.has(c)) continue;
+      const v = String(header[c] || '').trim();
+      if (v && COLUMN_PATTERNS[role].test(v)) { map[role] = c; taken.add(c); break; }
+    }
+  }
+  // Two money columns (withdrawal/deposit) or one signed column - never both.
+  if (map.debit !== undefined || map.credit !== undefined) delete map.amount;
+
+  return {
+    headerRow: best.headerRow,
+    header,
+    map,
+    confident: best.score >= 3 && map.date !== undefined &&
+      (map.amount !== undefined || map.debit !== undefined || map.credit !== undefined),
+  };
+}
+
+/* ------------------------------------------------------------------ cells */
+
+const EXCEL_EPOCH = Date.UTC(1899, 11, 30);
+
+/** Statement date cells arrive as strings, Date objects, or Excel serials. */
+function cellToDate(v) {
+  if (v == null || v === '') return null;
+  if (v instanceof Date && !isNaN(v)) return v.toISOString().slice(0, 10);
+  if (typeof v === 'number' && v > 20000 && v < 60000) {
+    return new Date(EXCEL_EPOCH + v * 864e5).toISOString().slice(0, 10);
+  }
+  return extractDate(String(v));
+}
+
+/** "1,299.00", "(1,299.00)" and "1299.00 Dr" all mean the same magnitude. */
+function cellToAmount(v) {
+  if (v == null || v === '') return null;
+  if (typeof v === 'number') return Number.isFinite(v) ? Math.abs(v) : null;
+  const s = String(v).trim();
+  if (!s || /^[-–—]$/.test(s)) return null;
+  const m = /-?[\d,]*\d(?:\.\d+)?/.exec(s.replace(/[₹]|rs\.?|inr/gi, ''));
+  if (!m) return null;
+  const n = Number(m[0].replace(/,/g, ''));
+  return Number.isFinite(n) ? Math.abs(n) : null;
+}
+
+function signOf(cell) {
+  const s = String(cell || '');
+  if (/\bcr\b|\bcredit\b/i.test(s)) return 'credit';
+  if (/\bdr\b|\bdebit\b/i.test(s)) return 'debit';
+  if (/^\s*\(.*\)\s*$/.test(s) || /^\s*-/.test(s)) return 'debit';
+  return null;
+}
+
+/* ------------------------------------------------------------------ narration */
+
+/** Scheme codes, routing noise and filler that are never the counterparty. */
+const NARRATION_NOISE = new Set([
+  'upi','mmt','imps','neft','rtgs','ach','nfs','vin','iin','top','si','inf','bil','pos','atw','atd',
+  'vps','ecs','nach','cms','int','chg','gst','dtax','gib','mat','eba','onl','idm','ttr','set','rev',
+  'vsi','npci','p2m','p2a','payment','from','to','ph','na','null','self','collect','pay','txn','ref',
+  'bpay','inft','tpt','ib','mb','and','the','for','via','by','dr','cr','inb','ecom','purchase',
+]);
+
+// An IFSC is four letters, a literal zero, then the branch code. The zero is
+// what distinguishes it from an ordinary long word like AMAZONIND.
+const LOOKS_LIKE_BANK_CODE = /^[A-Z]{4}0[A-Z0-9]{4,6}$/;
+const CHANNEL_HINTS = [
+  ['atm',      /\b(nfs|atw|atd|cash ?wdl|cash withdrawal|atm)\b/i],
+  ['upi',      /\bupi\b|@[a-z]{2,}/i],
+  ['card',     /\b(vin|pos|ecom|vps|purchase)\b/i],
+  ['mandate',  /\b(ach|ecs|nach|si)\b/i],
+  ['transfer', /\b(neft|imps|rtgs|mmt|inft|inft|tpt)\b/i],
+];
+
+/**
+ * Pull the counterparty out of a statement narration such as
+ * "UPI/307012345678/Payment from Ph/SWIGGY/YESB0YESBNK".
+ *
+ * @param {string} text
+ * @param {string[]} [knownMerchants] lowercase needles; a segment matching one
+ *        is almost certainly the merchant, which settles otherwise-tied segments.
+ */
+function parseNarration(text, knownMerchants = []) {
+  const raw = String(text || '').trim();
+  const out = { merchant: null, channel: 'other', ref: null, vpa: null };
+  if (!raw) return out;
+
+  for (const [channel, re] of CHANNEL_HINTS) {
+    if (re.test(raw)) { out.channel = channel; break; }
+  }
+
+  const refMatch = /\b(\d{9,18})\b/.exec(raw);
+  if (refMatch) out.ref = refMatch[1];
+
+  const vpa = /\b([a-zA-Z0-9][a-zA-Z0-9._-]{1,})@([a-z]{2,})\b/.exec(raw);
+  if (vpa) { out.vpa = `${vpa[1]}@${vpa[2]}`; out.merchant = cleanName(vpa[1]); return out; }
+
+  const segments = raw.split(/[\/|]+/).map(s => s.trim()).filter(Boolean);
+  const candidates = [];
+  for (const seg of segments) {
+    const words = seg.split(/\s+/).filter(w => !NARRATION_NOISE.has(w.toLowerCase()));
+    const cleaned = words.join(' ').replace(/[^A-Za-z0-9&.' -]/g, ' ').replace(/\s+/g, ' ').trim();
+    if (cleaned.length < 3) continue;
+    if (!/[A-Za-z]{3}/.test(cleaned)) continue;                 // needs real letters
+    if (/^\d+$/.test(cleaned.replace(/\s/g, ''))) continue;
+    // Only a single token can be a routing code; a multi-word segment is a name.
+    if (!/\s/.test(cleaned) && LOOKS_LIKE_BANK_CODE.test(cleaned)) continue;
+    if (NARRATION_NOISE.has(cleaned.toLowerCase())) continue;
+
+    const key = normKey(cleaned);
+    const known = knownMerchants.some(n => key.includes(n));
+    candidates.push({ text: cleaned, known, digits: (cleaned.match(/\d/g) || []).length });
+  }
+  if (!candidates.length) return out;
+
+  // A recognised merchant wins outright; then the least numeric segment; then the
+  // longest, since a counterparty name outruns a leftover scheme code like "SAL".
+  candidates.sort((a, b) =>
+    (b.known - a.known) || (a.digits - b.digits) || (b.text.length - a.text.length));
+  out.merchant = cleanName(candidates[0].text);
+  return out;
+}
+
+function cleanName(s) {
+  return String(s).replace(/\s+/g, ' ').replace(/^[^A-Za-z0-9]+|[^A-Za-z0-9]+$/g, '').slice(0, 48).trim();
+}
+
+/* ------------------------------------------------------------------ rows */
+
+/**
+ * Convert statement rows into transactions using a column mapping.
+ * @returns {{txns: object[], skipped: number}}
+ */
+function rowsToTransactions(rows, layout, opts = {}) {
+  const { map, headerRow } = layout;
+  const known = opts.knownMerchants || [];
+  const account = opts.account || null;
+  const issuer = opts.issuer || null;
+  const accountType = opts.accountType || 'bank';
+  const txns = [];
+  let skipped = 0;
+
+  // A lone amount column means one of two conventions: signed (negatives are
+  // debits, so a bare positive is a credit), or all-positive (every row a debit,
+  // as card statements list spends). One negative anywhere settles which.
+  let signedColumn = false;
+  if (map.amount !== undefined && map.debit === undefined && map.credit === undefined) {
+    for (let i = headerRow + 1; i < rows.length; i++) {
+      if (signOf(rows[i]?.[map.amount]) === 'debit') { signedColumn = true; break; }
+    }
+  }
+
+  for (let i = headerRow + 1; i < rows.length; i++) {
+    const row = rows[i];
+    if (!row || !row.length) continue;
+    const date = cellToDate(row[map.date]);
+    if (!date) { skipped++; continue; }
+
+    let amount = null, direction = null;
+    if (map.debit !== undefined || map.credit !== undefined) {
+      const dr = cellToAmount(row[map.debit]);
+      const cr = cellToAmount(row[map.credit]);
+      if (dr) { amount = dr; direction = 'debit'; }
+      else if (cr) { amount = cr; direction = 'credit'; }
+    } else if (map.amount !== undefined) {
+      amount = cellToAmount(row[map.amount]);
+      // A single amount column carries its sign in the cell, or in a Dr/Cr marker
+      // somewhere on the row.
+      direction = signOf(row[map.amount]) || signOf(row.join(' ')) ||
+        (signedColumn ? 'credit' : (opts.defaultDirection || 'debit'));
+    }
+    if (!amount) { skipped++; continue; }
+
+    const narration = map.narration !== undefined ? String(row[map.narration] || '') : '';
+    const parsed = parseNarration(narration, known);
+    const balance = map.balance !== undefined ? cellToAmount(row[map.balance]) : null;
+
+    txns.push({
+      kind: 'txn',
+      source: 'statement',
+      date,
+      amount,
+      direction,
+      merchant: parsed.merchant || (parsed.channel === 'atm' ? 'Cash withdrawal' : null),
+      channel: parsed.channel,
+      ref: (map.ref !== undefined && String(row[map.ref] || '').trim()) || parsed.ref || null,
+      balance,
+      issuer,
+      account,
+      accountType,
+      confidence: parsed.merchant ? 0.95 : 0.8,   // the amount and date are certain
+      raw: narration || `${date} ${amount}`,
+    });
+  }
+  return { txns, skipped };
+}
+
+/* ------------------------------------------------------------------ proof */
+
+/**
+ * A statement's running balance makes the import verifiable: for every
+ * consecutive pair, previous balance minus debit plus credit must equal the next
+ * balance. If that holds throughout, no row was dropped, duplicated or
+ * misparsed - a guarantee no message-based import can offer. Where it breaks, we
+ * name the row so it can be fixed rather than silently trusted.
+ */
+function checkBalanceContinuity(txns) {
+  const withBal = txns.filter(t => typeof t.balance === 'number' && Number.isFinite(t.balance));
+  if (withBal.length < 2) return { checked: 0, ok: true, breaks: [], available: false };
+
+  const breaks = [];
+  for (let i = 1; i < withBal.length; i++) {
+    const prev = withBal[i - 1], cur = withBal[i];
+    const delta = cur.direction === 'credit' ? cur.amount : -cur.amount;
+    const expected = prev.balance + delta;
+    if (Math.abs(expected - cur.balance) > 0.05) {
+      breaks.push({
+        index: i,
+        date: cur.date,
+        merchant: cur.merchant,
+        amount: cur.amount,
+        expected: Math.round(expected * 100) / 100,
+        actual: cur.balance,
+        gap: Math.round((cur.balance - expected) * 100) / 100,
+      });
+    }
+  }
+  return { checked: withBal.length, ok: breaks.length === 0, breaks, available: true };
+}
 
 
 /* ---- src/normalize.js ---- */
@@ -635,17 +994,75 @@ function dedupeKey(t) {
   return `d:${t.date || '?'}|${t.amount}|${t.account || '?'}|${normKey(t.merchant)}`;
 }
 
+/**
+ * Every identity a transaction answers to. One record can be known by its
+ * reference in one source and only by date+amount in another, so matching on a
+ * single key would let the same payment through twice.
+ */
+function dedupeKeys(t) {
+  const keys = [];
+  if (t.ref) keys.push(`ref:${t.ref}:${t.amount}`);
+  keys.push(`d:${t.date || '?'}|${t.amount}|${t.account || '?'}|${normKey(t.merchant)}`);
+  return keys;
+}
+
+/** Same money, same day, same account - used only to match ACROSS sources. */
+const crossKey = t => `x:${t.date || '?'}|${t.amount}|${t.account || '?'}`;
+
+/** Guard the cross-source match: two different payees are two transactions. */
+function merchantsCompatible(a, b) {
+  const x = normKey(a), y = normKey(b);
+  if (!x || !y) return true;
+  return x === y || x.includes(y) || y.includes(x);
+}
+
+/** Statements are complete and authoritative; an alert message is a notification
+ *  about the same event. When both describe one transaction, the statement wins. */
+const SOURCE_RANK = { statement: 3, manual: 2, sms: 1, undefined: 1 };
+const rankOf = t => SOURCE_RANK[t.source] ?? 1;
+
 function dedupe(txns) {
-  const seen = new Map();
-  const kept = [];
+  const rows = new Map();        // id -> transaction
+  const claims = new Map();      // any key -> id
+  const cross = new Map();       // cross key -> { id, source }
+  const order = [];
   let duplicates = 0;
+
   for (const t of txns) {
-    const k = dedupeKey(t);
-    if (seen.has(k)) { duplicates++; continue; }
-    seen.set(k, true);
-    kept.push({ ...t, id: k });
+    const keys = dedupeKeys(t);
+    const xk = crossKey(t);
+
+    let id = keys.map(k => claims.get(k)).find(Boolean);
+    if (!id) {
+      const c = cross.get(xk);
+      // Only across sources: within one source, two like-sized payments on one
+      // day are two payments, not a duplicate.
+      if (c && c.source !== t.source && merchantsCompatible(t.merchant, rows.get(c.id)?.merchant)) id = c.id;
+    }
+
+    if (!id) {
+      id = keys[0];
+      rows.set(id, { ...t, id });
+      order.push(id);
+      for (const k of keys) claims.set(k, id);
+      cross.set(xk, { id, source: t.source });
+      continue;
+    }
+
+    duplicates++;
+    const existing = rows.get(id);
+    if (rankOf(t) > rankOf(existing)) {
+      // Keep any category the user already corrected on the row being replaced,
+      // and keep the id so earlier claims still resolve.
+      rows.set(id, {
+        ...t, id,
+        category: existing.categorySource === 'user' ? existing.category : t.category,
+        categorySource: existing.categorySource === 'user' ? 'user' : t.categorySource,
+      });
+    }
+    for (const k of keys) if (!claims.has(k)) claims.set(k, id);
   }
-  return { txns: kept, duplicates };
+  return { txns: order.map(k => rows.get(k)), duplicates };
 }
 
 /**
@@ -814,6 +1231,7 @@ const State = {
   tab: 'month',
   sample: false,
   store: null,
+  pending: null,
   lastImport: null,
 };
 
@@ -947,19 +1365,177 @@ function toMessages(text, filename = '') {
   return splitMessages(text).map(body => ({ body, sender: '', receivedAt: null }));
 }
 
+/* --------------------------------------------------------------- statements */
+
+const ROLE_LABELS = {
+  date: 'Date', narration: 'Description', debit: 'Withdrawal',
+  credit: 'Deposit', amount: 'Amount', balance: 'Balance', ref: 'Reference',
+};
+
+/** Pull the account and bank out of the rows above the header, so the common
+ *  case needs no typing at all. */
+function guessAccountMeta(rows, headerRow, filename) {
+  // Only the preamble is trustworthy for this: narrations are full of OTHER
+  // banks' names (the payee's bank on every transfer), so scanning the rows
+  // would confidently label an ICICI statement "HDFC". Blank beats wrong - the
+  // field is right there to type into.
+  const preamble = rows.slice(0, Math.max(headerRow, 0)).flat().join(' ');
+  const iss = detectIssuer(preamble, '') || detectIssuer(filename || '', '');
+  const m = /(?:account|a\/c|card)\s*(?:number|no\.?)?\s*[:\-]?\s*([\dxX*]{6,20})/i.exec(preamble);
+  const digits = m ? m[1].replace(/\D/g, '') : '';
+  return { issuer: iss ? iss.name : '', account: digits.slice(-4) || '' };
+}
+
+async function readSpreadsheet(file) {
+  if (/\.csv$/i.test(file.name)) return parseCsv(await file.text());
+  if (typeof XLSX === 'undefined') {
+    toast('Excel support did not load. Re-download the statement as CSV.');
+    return null;
+  }
+  const wb = XLSX.read(await file.arrayBuffer(), { type: 'array', cellDates: true });
+  const sheet = wb.Sheets[wb.SheetNames[0]];
+  return XLSX.utils.sheet_to_json(sheet, { header: 1, raw: true, defval: '' });
+}
+
+/** Show what was found and let it be corrected before anything is imported. */
+function openStatementStep(rows, layout, filename) {
+  const meta = guessAccountMeta(rows, layout.headerRow, filename);
+  State.pending = { rows, layout, filename, ...meta };
+  el('paste-step').hidden = true;
+  renderStatementStep();
+}
+
+function renderStatementStep() {
+  const { rows, layout, filename, issuer, account } = State.pending;
+  const header = layout.header || [];
+  const colOptions = role => [`<option value="">— none —</option>`]
+    .concat(header.map((h, i) =>
+      `<option value="${i}"${layout.map[role] === i ? ' selected' : ''}>${esc(String(h || `Column ${i + 1}`).trim() || `Column ${i + 1}`)}</option>`))
+    .join('');
+
+  const { txns } = rowsToTransactions(rows, layout, {
+    knownMerchants: SEED_NEEDLES, issuer, account: account || null,
+  });
+  const check = checkBalanceContinuity(txns);
+
+  el('statement-step').hidden = false;
+  el('statement-step').innerHTML = `
+    <p class="drawer-sub">Read <strong>${esc(filename)}</strong> — found ${txns.length} transaction${txns.length === 1 ? '' : 's'}.
+      Check the columns below, then import.</p>
+
+    <div class="acct-row">
+      <label>Bank or card<input id="st-issuer" type="text" value="${esc(issuer)}" placeholder="ICICI Bank"></label>
+      <label>Last 4 digits<input id="st-account" type="text" maxlength="4" value="${esc(account)}" placeholder="7890"></label>
+    </div>
+
+    <div class="map-grid">
+      ${Object.keys(ROLE_LABELS).map(role => `
+        <label>${ROLE_LABELS[role]}
+          <select data-role="${role}">${colOptions(role)}</select>
+        </label>`).join('')}
+    </div>
+
+    ${balanceCheckHtml(check, txns.length)}
+
+    ${txns.length ? `<div class="preview"><table>
+      <thead><tr><th>Date</th><th>Description</th><th class="num">Amount</th><th class="num">Balance</th></tr></thead>
+      <tbody>${txns.slice(0, 8).map(t => `<tr>
+        <td class="mono">${esc(t.date)}</td>
+        <td>${esc(t.merchant || '—')}</td>
+        <td class="num mono ${t.direction === 'credit' ? 'is-credit' : ''}">${t.direction === 'credit' ? '+' : '−'}${INR(t.amount, 2)}</td>
+        <td class="num mono dim">${t.balance == null ? '—' : INR(t.balance, 2)}</td>
+      </tr>`).join('')}</tbody></table></div>` : ''}
+
+    <div class="drawer-actions">
+      <button class="btn btn-primary" id="btn-commit-statement"${txns.length ? '' : ' disabled'}>Import ${txns.length} transaction${txns.length === 1 ? '' : 's'}</button>
+      <button class="btn btn-ghost" id="btn-back-to-paste">Back</button>
+    </div>`;
+
+  for (const sel of el('statement-step').querySelectorAll('select[data-role]')) {
+    sel.addEventListener('change', e => {
+      const role = e.target.dataset.role;
+      const v = e.target.value;
+      if (v === '') delete State.pending.layout.map[role];
+      else State.pending.layout.map[role] = Number(v);
+      renderStatementStep();
+    });
+  }
+  for (const id of ['st-issuer', 'st-account']) {
+    el(id).addEventListener('input', e => {
+      State.pending[id === 'st-issuer' ? 'issuer' : 'account'] = e.target.value.trim();
+    });
+  }
+  el('btn-commit-statement').addEventListener('click', commitStatement);
+  el('btn-back-to-paste').addEventListener('click', () => {
+    State.pending = null;
+    el('statement-step').hidden = true;
+    el('paste-step').hidden = false;
+  });
+}
+
+/**
+ * The running balance is what makes a statement import verifiable rather than
+ * merely plausible, so the result is shown before anything is committed.
+ */
+function balanceCheckHtml(check, total) {
+  if (!check.available) {
+    return `<div class="check check-none"><strong>No balance column to check against</strong>
+      The amounts will import as they are, but nothing can confirm the file is complete.
+      Re-download with the balance column if your bank offers it.</div>`;
+  }
+  if (check.ok) {
+    return `<div class="check check-ok"><strong>All ${check.checked} rows add up</strong>
+      Every row matches the statement's own running balance, so nothing is missing,
+      duplicated or misread.</div>`;
+  }
+  return `<div class="check check-bad"><strong>${check.breaks.length} row${check.breaks.length === 1 ? '' : 's'} do not add up</strong>
+    ${check.checked} rows were checked against the running balance. These do not reconcile —
+    usually a column mapped to the wrong role, or a statement that starts mid-day:
+    <ul>${check.breaks.slice(0, 5).map(b =>
+      `<li>${esc(b.date)} ${esc(b.merchant || '')} — off by ${INR(b.gap, 2)}</li>`).join('')}</ul></div>`;
+}
+
+async function commitStatement() {
+  const { rows, layout, issuer, account } = State.pending;
+  const { txns } = rowsToTransactions(rows, layout, {
+    knownMerchants: SEED_NEEDLES, issuer: issuer || null, account: account || null,
+  });
+  if (!txns.length) { toast('Nothing to import.'); return; }
+
+  // Sample rows are a demonstration, not data: a real import replaces them
+  // outright rather than merging with them.
+  const existing = State.sample ? [] : State.txns.concat(State.review);
+  const combined = buildLedger(
+    existing.map(t => ({ ...t, kind: 'txn' })).concat(txns),
+    { rules: State.rules },
+  );
+  const added = combined.txns.length + combined.review.length - existing.length;
+  State.sample = false;
+  State.txns = combined.txns;
+  State.review = combined.review;
+  State.pending = null;
+
+  const months = listMonths(State.txns);
+  if (!months.includes(State.month)) State.month = months[0] || State.month;
+  await persist();
+  render();
+  closeDrawer();
+  toast(`Imported ${added} new transaction${added === 1 ? '' : 's'}${combined.duplicates ? `, skipped ${combined.duplicates} already tracked` : ''}.`);
+}
+
 async function importText(text, filename) {
   const messages = toMessages(text, filename);
   if (!messages.length) { toast('No messages found in that text.'); return; }
 
   const parsed = messages.map(m => parseMessage(m.body, { sender: m.sender, receivedAt: m.receivedAt }));
-  const existing = State.txns.concat(State.review);
+  const existing = State.sample ? [] : State.txns.concat(State.review);   // see commitStatement
   const combined = buildLedger(
     existing.map(t => ({ ...t, kind: 'txn' })).concat(parsed),
     { rules: State.rules },
   );
 
   const added = combined.txns.length + combined.review.length - existing.length;
-  if (State.sample) { State.sample = false; }   // real data replaces the sample
+  State.sample = false;
   State.txns = combined.txns;
   State.review = combined.review;
   State.lastImport = {
@@ -1269,7 +1845,14 @@ function toast(msg) {
 }
 
 function openDrawer() { el('drawer').hidden = false; el('paste-box').focus(); }
-function closeDrawer() { el('drawer').hidden = true; el('paste-box').value = ''; el('import-summary').innerHTML = ''; }
+function closeDrawer() {
+  el('drawer').hidden = true;
+  el('paste-box').value = '';
+  State.pending = null;
+  el('statement-step').hidden = true;
+  el('statement-step').innerHTML = '';
+  el('paste-step').hidden = false;
+}
 
 /* ------------------------------------------------------------------ sample */
 
@@ -1337,7 +1920,19 @@ for (const t of ['month', 'trends']) {
 el('file-input').addEventListener('change', async e => {
   const f = e.target.files[0];
   if (!f) return;
-  await importText(await f.text(), f.name);
+  try {
+    if (/\.(xlsx?|csv)$/i.test(f.name)) {
+      const rows = await readSpreadsheet(f);
+      if (rows) {
+        const layout = detectLayout(rows);
+        if (layout.headerRow !== -1) { openStatementStep(rows, layout, f.name); e.target.value = ''; return; }
+      }
+      // A CSV with no statement header is probably an export of messages.
+    }
+    await importText(await f.text(), f.name);
+  } catch (err) {
+    toast('Could not read that file. CSV or Excel statements work best.');
+  }
   e.target.value = '';
 });
 document.addEventListener('keydown', e => { if (e.key === 'Escape' && !el('drawer').hidden) closeDrawer(); });

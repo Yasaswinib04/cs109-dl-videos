@@ -21,6 +21,7 @@ const State = {
   tab: 'month',
   sample: false,
   store: null,
+  pending: null,
   lastImport: null,
 };
 
@@ -154,19 +155,177 @@ function toMessages(text, filename = '') {
   return splitMessages(text).map(body => ({ body, sender: '', receivedAt: null }));
 }
 
+/* --------------------------------------------------------------- statements */
+
+const ROLE_LABELS = {
+  date: 'Date', narration: 'Description', debit: 'Withdrawal',
+  credit: 'Deposit', amount: 'Amount', balance: 'Balance', ref: 'Reference',
+};
+
+/** Pull the account and bank out of the rows above the header, so the common
+ *  case needs no typing at all. */
+function guessAccountMeta(rows, headerRow, filename) {
+  // Only the preamble is trustworthy for this: narrations are full of OTHER
+  // banks' names (the payee's bank on every transfer), so scanning the rows
+  // would confidently label an ICICI statement "HDFC". Blank beats wrong - the
+  // field is right there to type into.
+  const preamble = rows.slice(0, Math.max(headerRow, 0)).flat().join(' ');
+  const iss = detectIssuer(preamble, '') || detectIssuer(filename || '', '');
+  const m = /(?:account|a\/c|card)\s*(?:number|no\.?)?\s*[:\-]?\s*([\dxX*]{6,20})/i.exec(preamble);
+  const digits = m ? m[1].replace(/\D/g, '') : '';
+  return { issuer: iss ? iss.name : '', account: digits.slice(-4) || '' };
+}
+
+async function readSpreadsheet(file) {
+  if (/\.csv$/i.test(file.name)) return parseCsv(await file.text());
+  if (typeof XLSX === 'undefined') {
+    toast('Excel support did not load. Re-download the statement as CSV.');
+    return null;
+  }
+  const wb = XLSX.read(await file.arrayBuffer(), { type: 'array', cellDates: true });
+  const sheet = wb.Sheets[wb.SheetNames[0]];
+  return XLSX.utils.sheet_to_json(sheet, { header: 1, raw: true, defval: '' });
+}
+
+/** Show what was found and let it be corrected before anything is imported. */
+function openStatementStep(rows, layout, filename) {
+  const meta = guessAccountMeta(rows, layout.headerRow, filename);
+  State.pending = { rows, layout, filename, ...meta };
+  el('paste-step').hidden = true;
+  renderStatementStep();
+}
+
+function renderStatementStep() {
+  const { rows, layout, filename, issuer, account } = State.pending;
+  const header = layout.header || [];
+  const colOptions = role => [`<option value="">— none —</option>`]
+    .concat(header.map((h, i) =>
+      `<option value="${i}"${layout.map[role] === i ? ' selected' : ''}>${esc(String(h || `Column ${i + 1}`).trim() || `Column ${i + 1}`)}</option>`))
+    .join('');
+
+  const { txns } = rowsToTransactions(rows, layout, {
+    knownMerchants: SEED_NEEDLES, issuer, account: account || null,
+  });
+  const check = checkBalanceContinuity(txns);
+
+  el('statement-step').hidden = false;
+  el('statement-step').innerHTML = `
+    <p class="drawer-sub">Read <strong>${esc(filename)}</strong> — found ${txns.length} transaction${txns.length === 1 ? '' : 's'}.
+      Check the columns below, then import.</p>
+
+    <div class="acct-row">
+      <label>Bank or card<input id="st-issuer" type="text" value="${esc(issuer)}" placeholder="ICICI Bank"></label>
+      <label>Last 4 digits<input id="st-account" type="text" maxlength="4" value="${esc(account)}" placeholder="7890"></label>
+    </div>
+
+    <div class="map-grid">
+      ${Object.keys(ROLE_LABELS).map(role => `
+        <label>${ROLE_LABELS[role]}
+          <select data-role="${role}">${colOptions(role)}</select>
+        </label>`).join('')}
+    </div>
+
+    ${balanceCheckHtml(check, txns.length)}
+
+    ${txns.length ? `<div class="preview"><table>
+      <thead><tr><th>Date</th><th>Description</th><th class="num">Amount</th><th class="num">Balance</th></tr></thead>
+      <tbody>${txns.slice(0, 8).map(t => `<tr>
+        <td class="mono">${esc(t.date)}</td>
+        <td>${esc(t.merchant || '—')}</td>
+        <td class="num mono ${t.direction === 'credit' ? 'is-credit' : ''}">${t.direction === 'credit' ? '+' : '−'}${INR(t.amount, 2)}</td>
+        <td class="num mono dim">${t.balance == null ? '—' : INR(t.balance, 2)}</td>
+      </tr>`).join('')}</tbody></table></div>` : ''}
+
+    <div class="drawer-actions">
+      <button class="btn btn-primary" id="btn-commit-statement"${txns.length ? '' : ' disabled'}>Import ${txns.length} transaction${txns.length === 1 ? '' : 's'}</button>
+      <button class="btn btn-ghost" id="btn-back-to-paste">Back</button>
+    </div>`;
+
+  for (const sel of el('statement-step').querySelectorAll('select[data-role]')) {
+    sel.addEventListener('change', e => {
+      const role = e.target.dataset.role;
+      const v = e.target.value;
+      if (v === '') delete State.pending.layout.map[role];
+      else State.pending.layout.map[role] = Number(v);
+      renderStatementStep();
+    });
+  }
+  for (const id of ['st-issuer', 'st-account']) {
+    el(id).addEventListener('input', e => {
+      State.pending[id === 'st-issuer' ? 'issuer' : 'account'] = e.target.value.trim();
+    });
+  }
+  el('btn-commit-statement').addEventListener('click', commitStatement);
+  el('btn-back-to-paste').addEventListener('click', () => {
+    State.pending = null;
+    el('statement-step').hidden = true;
+    el('paste-step').hidden = false;
+  });
+}
+
+/**
+ * The running balance is what makes a statement import verifiable rather than
+ * merely plausible, so the result is shown before anything is committed.
+ */
+function balanceCheckHtml(check, total) {
+  if (!check.available) {
+    return `<div class="check check-none"><strong>No balance column to check against</strong>
+      The amounts will import as they are, but nothing can confirm the file is complete.
+      Re-download with the balance column if your bank offers it.</div>`;
+  }
+  if (check.ok) {
+    return `<div class="check check-ok"><strong>All ${check.checked} rows add up</strong>
+      Every row matches the statement's own running balance, so nothing is missing,
+      duplicated or misread.</div>`;
+  }
+  return `<div class="check check-bad"><strong>${check.breaks.length} row${check.breaks.length === 1 ? '' : 's'} do not add up</strong>
+    ${check.checked} rows were checked against the running balance. These do not reconcile —
+    usually a column mapped to the wrong role, or a statement that starts mid-day:
+    <ul>${check.breaks.slice(0, 5).map(b =>
+      `<li>${esc(b.date)} ${esc(b.merchant || '')} — off by ${INR(b.gap, 2)}</li>`).join('')}</ul></div>`;
+}
+
+async function commitStatement() {
+  const { rows, layout, issuer, account } = State.pending;
+  const { txns } = rowsToTransactions(rows, layout, {
+    knownMerchants: SEED_NEEDLES, issuer: issuer || null, account: account || null,
+  });
+  if (!txns.length) { toast('Nothing to import.'); return; }
+
+  // Sample rows are a demonstration, not data: a real import replaces them
+  // outright rather than merging with them.
+  const existing = State.sample ? [] : State.txns.concat(State.review);
+  const combined = buildLedger(
+    existing.map(t => ({ ...t, kind: 'txn' })).concat(txns),
+    { rules: State.rules },
+  );
+  const added = combined.txns.length + combined.review.length - existing.length;
+  State.sample = false;
+  State.txns = combined.txns;
+  State.review = combined.review;
+  State.pending = null;
+
+  const months = listMonths(State.txns);
+  if (!months.includes(State.month)) State.month = months[0] || State.month;
+  await persist();
+  render();
+  closeDrawer();
+  toast(`Imported ${added} new transaction${added === 1 ? '' : 's'}${combined.duplicates ? `, skipped ${combined.duplicates} already tracked` : ''}.`);
+}
+
 async function importText(text, filename) {
   const messages = toMessages(text, filename);
   if (!messages.length) { toast('No messages found in that text.'); return; }
 
   const parsed = messages.map(m => parseMessage(m.body, { sender: m.sender, receivedAt: m.receivedAt }));
-  const existing = State.txns.concat(State.review);
+  const existing = State.sample ? [] : State.txns.concat(State.review);   // see commitStatement
   const combined = buildLedger(
     existing.map(t => ({ ...t, kind: 'txn' })).concat(parsed),
     { rules: State.rules },
   );
 
   const added = combined.txns.length + combined.review.length - existing.length;
-  if (State.sample) { State.sample = false; }   // real data replaces the sample
+  State.sample = false;
   State.txns = combined.txns;
   State.review = combined.review;
   State.lastImport = {
@@ -476,7 +635,14 @@ function toast(msg) {
 }
 
 function openDrawer() { el('drawer').hidden = false; el('paste-box').focus(); }
-function closeDrawer() { el('drawer').hidden = true; el('paste-box').value = ''; el('import-summary').innerHTML = ''; }
+function closeDrawer() {
+  el('drawer').hidden = true;
+  el('paste-box').value = '';
+  State.pending = null;
+  el('statement-step').hidden = true;
+  el('statement-step').innerHTML = '';
+  el('paste-step').hidden = false;
+}
 
 /* ------------------------------------------------------------------ sample */
 
@@ -544,7 +710,19 @@ for (const t of ['month', 'trends']) {
 el('file-input').addEventListener('change', async e => {
   const f = e.target.files[0];
   if (!f) return;
-  await importText(await f.text(), f.name);
+  try {
+    if (/\.(xlsx?|csv)$/i.test(f.name)) {
+      const rows = await readSpreadsheet(f);
+      if (rows) {
+        const layout = detectLayout(rows);
+        if (layout.headerRow !== -1) { openStatementStep(rows, layout, f.name); e.target.value = ''; return; }
+      }
+      // A CSV with no statement header is probably an export of messages.
+    }
+    await importText(await f.text(), f.name);
+  } catch (err) {
+    toast('Could not read that file. CSV or Excel statements work best.');
+  }
   e.target.value = '';
 });
 document.addEventListener('keydown', e => { if (e.key === 'Escape' && !el('drawer').hidden) closeDrawer(); });

@@ -8,7 +8,7 @@
  */
 import { readFileSync, writeFileSync, mkdirSync } from 'node:fs';
 
-const ORDER = ['src/parse.js', 'src/categorize.js', 'src/normalize.js', 'src/ui.js'];
+const ORDER = ['src/parse.js', 'src/categorize.js', 'src/statement.js', 'src/normalize.js', 'src/ui.js'];
 
 const stripped = ORDER.map(f => {
   const src = readFileSync(new URL(f, import.meta.url), 'utf8');
