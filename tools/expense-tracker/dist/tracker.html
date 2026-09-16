@@ -1,0 +1,1947 @@
+<title>Passbook</title>
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&family=Instrument+Serif:ital@0;1&display=swap">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<style>
+/* Light is the base set; the two blocks after it only redefine tokens, so the
+   un-stamped (system-default) viewer gets a complete palette either way. */
+:root {
+  --ground:#F7F6F3; --surface:#FFFFFF; --surface-2:#F2F1ED; --sunk:#EDEBE5;
+  --ink:#191B22; --ink-2:#474C5B; --muted:#6C707E; --line:#E3E1DB;
+  --accent:#2E4B8F; --accent-soft:#E9EDF7; --on-accent:#FFFFFF;
+  --good:#1F7A4D; --warn:#9C6414; --crit:#A63A2E;
+  --shadow:0 1px 2px rgba(25,27,34,.05), 0 8px 24px -16px rgba(25,27,34,.25);
+  --sans:'IBM Plex Sans', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --mono:'IBM Plex Mono', ui-monospace, 'SF Mono', Menlo, monospace;
+  --serif:'Instrument Serif', 'Iowan Old Style', Georgia, serif;
+  --r:10px;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --ground:#101219; --surface:#181B23; --surface-2:#1F232D; --sunk:#14171E;
+    --ink:#E8EAF0; --ink-2:#B4BAC8; --muted:#8B92A3; --line:#2A2F3B;
+    --accent:#7FA0E4; --accent-soft:#1D2536; --on-accent:#0F1219;
+    --good:#4FB783; --warn:#D49A48; --crit:#E0766D;
+    --shadow:0 1px 2px rgba(0,0,0,.4), 0 8px 24px -16px rgba(0,0,0,.8);
+  }
+}
+:root[data-theme="dark"] {
+  --ground:#101219; --surface:#181B23; --surface-2:#1F232D; --sunk:#14171E;
+  --ink:#E8EAF0; --ink-2:#B4BAC8; --muted:#8B92A3; --line:#2A2F3B;
+  --accent:#7FA0E4; --accent-soft:#1D2536; --on-accent:#0F1219;
+  --good:#4FB783; --warn:#D49A48; --crit:#E0766D;
+  --shadow:0 1px 2px rgba(0,0,0,.4), 0 8px 24px -16px rgba(0,0,0,.8);
+}
+
+* { box-sizing:border-box; }
+body { background:var(--ground); color:var(--ink); font-family:var(--sans); font-size:15px; line-height:1.5; }
+.wrap { max-width:1120px; margin:0 auto; padding-inline:20px; padding-block:0 64px; }
+h1,h2,h3 { text-wrap:balance; margin:0; }
+p { margin:0; }
+button, select, input, textarea { font:inherit; color:inherit; }
+:focus-visible { outline:2px solid var(--accent); outline-offset:2px; border-radius:4px; }
+
+/* ---------- header ---------- */
+.top { position:sticky; top:0; z-index:20; background:color-mix(in srgb, var(--ground) 88%, transparent);
+  backdrop-filter:blur(10px); border-bottom:1px solid var(--line); margin-bottom:28px; }
+.top-in { max-width:1120px; margin:0 auto; padding-inline:20px; padding-block:14px;
+  display:flex; flex-wrap:wrap; align-items:center; gap:12px 16px; }
+.brand { display:flex; align-items:baseline; gap:10px; margin-right:auto; }
+.brand-name { font-family:var(--serif); font-size:27px; letter-spacing:.01em; }
+.brand-note { font-family:var(--mono); font-size:11px; color:var(--muted); letter-spacing:.04em; }
+.tabs { display:flex; gap:2px; background:var(--sunk); padding:3px; border-radius:8px; }
+.tab { border:0; background:none; padding:6px 14px; border-radius:6px; color:var(--ink-2);
+  font-size:13.5px; font-weight:500; cursor:pointer; }
+.tab[aria-selected="true"] { background:var(--surface); color:var(--ink); box-shadow:var(--shadow); }
+.btn { border:1px solid var(--line); background:var(--surface); color:var(--ink); padding:7px 14px;
+  border-radius:8px; font-size:13.5px; font-weight:500; cursor:pointer; }
+.btn:hover { border-color:var(--accent); color:var(--accent); }
+.btn-primary { background:var(--accent); border-color:var(--accent); color:var(--on-accent); }
+.btn-primary:hover { filter:brightness(1.08); color:var(--on-accent); }
+.btn-ghost { background:none; border-color:transparent; color:var(--muted); }
+.btn-ghost:hover { color:var(--crit); border-color:transparent; }
+.btn-sm { padding:5px 11px; font-size:12.5px; }
+select { background:var(--surface); border:1px solid var(--line); border-radius:8px; padding:7px 10px; font-size:13.5px; }
+
+.banner { display:flex; flex-wrap:wrap; align-items:center; gap:10px; background:var(--accent-soft);
+  border:1px solid color-mix(in srgb, var(--accent) 25%, transparent); border-radius:var(--r);
+  padding:12px 16px; margin-bottom:24px; font-size:13.5px; color:var(--ink-2); }
+.banner strong { color:var(--ink); }
+
+/* ---------- summary tiles ---------- */
+.summary { display:grid; grid-template-columns:1.4fr 1fr 1fr 1fr; gap:14px; margin-bottom:24px; }
+.tile { background:var(--surface); border:1px solid var(--line); border-radius:var(--r);
+  padding:18px 20px; display:flex; flex-direction:column; gap:4px; }
+.tile-lead { background:var(--ink); border-color:var(--ink); color:var(--ground); }
+.tile-lead .tile-label, .tile-lead .tile-sub { color:color-mix(in srgb, var(--ground) 72%, transparent); }
+.tile-label { font-family:var(--mono); font-size:10.5px; letter-spacing:.1em; text-transform:uppercase; color:var(--muted); }
+.figure { font-family:var(--serif); font-size:46px; line-height:1.05; letter-spacing:-.01em; font-variant-numeric:tabular-nums; }
+.figure-sm { font-family:var(--serif); font-size:30px; line-height:1.15; font-variant-numeric:tabular-nums; }
+.tile-sub { font-size:12.5px; color:var(--muted); }
+.is-up { color:var(--crit); } .is-down { color:var(--good); }
+.tile-lead .is-up { color:#FFB3A8; } .tile-lead .is-down { color:#86D9AE; }
+.is-negative { color:var(--crit); }
+
+/* ---------- panels ---------- */
+.grid-2 { display:grid; grid-template-columns:1fr 1fr; gap:14px; margin-bottom:14px; }
+.panel { background:var(--surface); border:1px solid var(--line); border-radius:var(--r); padding:20px; margin-bottom:14px; }
+.panel h2 { font-size:14px; font-weight:600; letter-spacing:.01em; margin-bottom:16px;
+  display:flex; align-items:center; gap:8px; }
+.count { font-family:var(--mono); font-size:11px; font-weight:400; color:var(--muted);
+  background:var(--sunk); padding:2px 7px; border-radius:20px; }
+.count-warn { background:color-mix(in srgb, var(--warn) 15%, transparent); color:var(--warn); }
+.note { font-size:12.5px; color:var(--muted); margin-top:14px; }
+.note strong { color:var(--ink); font-variant-numeric:tabular-nums; }
+.empty { font-size:13.5px; color:var(--muted); padding:20px 0; }
+.panel-review { border-color:color-mix(in srgb, var(--warn) 40%, var(--line)); }
+
+/* ---------- bars: length carries magnitude, colour stays constant ---------- */
+.bars { display:flex; flex-direction:column; gap:9px; }
+.bar-row { display:grid; grid-template-columns:minmax(72px,118px) 1fr auto; align-items:center; gap:12px; }
+.bar-label { font-size:13px; color:var(--ink-2); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.bar-track { background:var(--sunk); border-radius:4px; height:16px; }
+.bar-fill { background:var(--accent); height:100%; border-radius:4px; min-width:3px; }
+.bar-value { font-family:var(--mono); font-size:12.5px; font-variant-numeric:tabular-nums; white-space:nowrap; }
+.bar-pct { color:var(--muted); margin-left:8px; font-size:11px; }
+
+/* ---------- column chart ---------- */
+.cols { display:flex; align-items:flex-end; gap:2px; height:168px; border-bottom:1px solid var(--line); }
+.col { flex:1 1 0; min-width:0; height:100%; display:flex; flex-direction:column; justify-content:flex-end;
+  align-items:center; position:relative; cursor:default; }
+.col-bar { width:100%; max-width:34px; background:var(--accent); border-radius:3px 3px 0 0;
+  transition:opacity .12s ease; }
+.col:hover .col-bar { opacity:.72; }
+.col-label { position:absolute; bottom:-19px; font-family:var(--mono); font-size:9.5px; color:var(--muted); }
+.cols + .note { margin-top:30px; }
+
+/* ---------- tables ---------- */
+.table-wrap { overflow-x:auto; margin:0 -20px; padding:0 20px; }
+table { width:100%; border-collapse:collapse; font-size:13.5px; }
+th { text-align:left; font-family:var(--mono); font-size:10px; letter-spacing:.09em; text-transform:uppercase;
+  color:var(--muted); font-weight:400; padding:0 10px 9px 0; border-bottom:1px solid var(--line); white-space:nowrap; }
+td { padding:9px 10px 9px 0; border-bottom:1px solid var(--line); vertical-align:middle; }
+tr:last-child td { border-bottom:0; }
+.num { text-align:right; padding-right:0; }
+th.num { padding-right:0; }
+.mono { font-family:var(--mono); font-variant-numeric:tabular-nums; font-size:12.5px; }
+.dim { color:var(--muted); }
+.merchant { font-weight:500; }
+.is-credit { color:var(--good); }
+.is-netted { opacity:.5; }
+.is-netted .num { text-decoration:line-through; }
+.chip { font-family:var(--mono); font-size:9.5px; text-transform:uppercase; letter-spacing:.06em;
+  background:var(--accent-soft); color:var(--accent); padding:2px 6px; border-radius:4px; margin-left:7px; }
+.chip-muted { background:var(--sunk); color:var(--muted); }
+.cat-select { padding:4px 8px; font-size:12.5px; border-radius:6px; background:var(--surface-2); border-color:transparent; max-width:150px; }
+.cat-select:hover { border-color:var(--line); }
+
+/* ---------- review ---------- */
+.review-row { border-top:1px solid var(--line); padding:14px 0; }
+.review-row:first-of-type { border-top:0; }
+.review-raw { font-family:var(--mono); font-size:11.5px; color:var(--ink-2); background:var(--sunk);
+  padding:9px 11px; border-radius:6px; margin-bottom:11px; word-break:break-word; }
+.review-fields { display:flex; flex-wrap:wrap; gap:10px; align-items:flex-end; }
+.review-fields label { display:flex; flex-direction:column; gap:4px; font-family:var(--mono);
+  font-size:10px; letter-spacing:.08em; text-transform:uppercase; color:var(--muted); }
+.review-fields input { background:var(--surface-2); border:1px solid var(--line); border-radius:6px;
+  padding:6px 9px; font-size:13px; width:130px; }
+
+/* ---------- drawer ---------- */
+.drawer { position:fixed; inset:0; z-index:40; background:rgba(15,17,22,.5); backdrop-filter:blur(3px);
+  display:flex; align-items:flex-end; justify-content:center; }
+/* .drawer's display would otherwise beat the UA rule for [hidden]. */
+.drawer[hidden] { display:none; }
+.drawer-card { background:var(--surface); border:1px solid var(--line); border-radius:14px 14px 0 0;
+  width:min(680px,100%); max-height:88vh; overflow-y:auto; padding:24px; box-shadow:var(--shadow); }
+.drawer-head { display:flex; align-items:center; justify-content:space-between; gap:12px; margin-bottom:6px; }
+.drawer-head h2 { font-family:var(--serif); font-size:24px; font-weight:400; }
+.drawer-sub { font-size:13.5px; color:var(--muted); margin-bottom:16px; }
+textarea { width:100%; min-height:170px; background:var(--sunk); border:1px solid var(--line);
+  border-radius:8px; padding:12px; font-family:var(--mono); font-size:12.5px; resize:vertical; }
+.drawer-actions { display:flex; flex-wrap:wrap; gap:10px; align-items:center; margin-top:14px; }
+.file-label { border:1px dashed var(--line); border-radius:8px; padding:7px 14px; font-size:13.5px;
+  cursor:pointer; color:var(--ink-2); }
+.file-label:hover { border-color:var(--accent); color:var(--accent); }
+.file-label input { display:none; }
+.how { margin-top:20px; border-top:1px solid var(--line); padding-top:16px; font-size:13px; color:var(--ink-2); }
+.how h3 { font-size:12px; font-family:var(--mono); letter-spacing:.08em; text-transform:uppercase;
+  color:var(--muted); margin-bottom:9px; font-weight:400; }
+.how ol { margin:0; padding-left:18px; display:flex; flex-direction:column; gap:5px; }
+.how code { font-family:var(--mono); font-size:11.5px; background:var(--sunk); padding:1px 5px; border-radius:4px; }
+
+/* ---------- statement import ---------- */
+.step { margin-top:16px; }
+.map-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(150px,1fr)); gap:10px; margin:14px 0; }
+.map-grid label { display:flex; flex-direction:column; gap:4px; font-family:var(--mono); font-size:10px;
+  letter-spacing:.08em; text-transform:uppercase; color:var(--muted); }
+.map-grid select { width:100%; font-size:12.5px; padding:6px 8px; }
+.acct-row { display:flex; flex-wrap:wrap; gap:10px; align-items:flex-end; margin-bottom:6px; }
+.acct-row label { display:flex; flex-direction:column; gap:4px; font-family:var(--mono); font-size:10px;
+  letter-spacing:.08em; text-transform:uppercase; color:var(--muted); }
+.acct-row input { background:var(--surface-2); border:1px solid var(--line); border-radius:6px;
+  padding:6px 9px; font-size:13px; width:170px; }
+.check { border-radius:8px; padding:12px 14px; font-size:13px; margin:14px 0; border:1px solid; }
+.check-ok { background:color-mix(in srgb, var(--good) 9%, transparent);
+  border-color:color-mix(in srgb, var(--good) 35%, transparent); color:var(--ink); }
+.check-bad { background:color-mix(in srgb, var(--warn) 11%, transparent);
+  border-color:color-mix(in srgb, var(--warn) 42%, transparent); color:var(--ink); }
+.check-none { background:var(--sunk); border-color:var(--line); color:var(--ink-2); }
+.check strong { display:block; margin-bottom:3px; }
+.check ul { margin:8px 0 0; padding-left:18px; font-family:var(--mono); font-size:11.5px; color:var(--ink-2); }
+.preview { max-height:210px; overflow:auto; border:1px solid var(--line); border-radius:8px; }
+.preview table { font-size:11.5px; }
+.preview th, .preview td { padding:6px 10px; white-space:nowrap; }
+.preview th { position:sticky; top:0; background:var(--surface); }
+
+/* ---------- floating bits ---------- */
+#tip { position:fixed; z-index:60; transform:translate(-50%,-100%); background:var(--ink); color:var(--ground);
+  font-family:var(--mono); font-size:11.5px; padding:5px 9px; border-radius:6px; pointer-events:none; white-space:nowrap; }
+#toast { position:fixed; left:50%; bottom:22px; transform:translateX(-50%); z-index:60; background:var(--ink);
+  color:var(--ground); padding:10px 18px; border-radius:999px; font-size:13.5px; box-shadow:var(--shadow);
+  max-width:calc(100vw - 40px); text-align:center; }
+
+@media (max-width:860px) {
+  .summary { grid-template-columns:1fr 1fr; }
+  .grid-2 { grid-template-columns:1fr; }
+}
+@media (max-width:560px) {
+  .summary { grid-template-columns:1fr; }
+  .figure { font-size:38px; }
+  .brand { width:100%; }
+  .top-in { padding-block:12px; }
+  .bar-row { grid-template-columns:minmax(60px,90px) 1fr auto; gap:9px; }
+  .bar-pct { display:none; }
+}
+@media (prefers-reduced-motion:reduce) { * { transition:none !important; animation:none !important; } }
+</style>
+
+<header class="top">
+  <div class="top-in">
+    <div class="brand">
+      <span class="brand-name">Passbook</span>
+      <span class="brand-note" id="storage-note">&nbsp;</span>
+    </div>
+    <div class="tabs" role="tablist">
+      <button class="tab" id="tab-month" role="tab" aria-selected="true">Month</button>
+      <button class="tab" id="tab-trends" role="tab" aria-selected="false">Trends</button>
+    </div>
+    <select id="month-select" aria-label="Month to show"></select>
+    <button class="btn btn-primary" id="btn-import">Import</button>
+  </div>
+</header>
+
+<div class="wrap">
+  <div class="banner" id="sample-banner" hidden>
+    <span><strong>These are sample transactions</strong>, not yours — they show what the tracker does. Adding your own messages replaces them.</span>
+  </div>
+
+  <main id="view"></main>
+  <div id="review-panel"></div>
+
+  <p class="note" style="display:flex;gap:14px;flex-wrap:wrap;align-items:center;">
+    <button class="btn btn-sm" id="btn-export">Export CSV</button>
+    <button class="btn btn-sm btn-ghost" id="btn-clear">Delete all data</button>
+    <span>Your messages are parsed on this page and stored with it. Nothing is sent anywhere else.</span>
+  </p>
+</div>
+
+<div class="drawer" id="drawer" hidden>
+  <div class="drawer-card" role="dialog" aria-modal="true" aria-labelledby="drawer-title">
+    <div class="drawer-head">
+      <h2 id="drawer-title">Import transactions</h2>
+      <button class="btn btn-sm btn-ghost" id="btn-close-drawer">Close</button>
+    </div>
+    <div id="paste-step">
+    <p class="drawer-sub">Load a bank or card statement (CSV or Excel) — the most complete source — or paste alert messages. Duplicates are skipped either way, so overlapping imports are safe.</p>
+    <textarea id="paste-box" placeholder="Sent Rs.318.00 From HDFC Bank A/C x4417 To swiggy@ybl On 03-09-25 Ref 561203914477&#10;INR 2,499.00 spent using Amazon Pay ICICI Bank Card XX8802 on 05-09-25 on AMAZON&#10;&#10;One message per line, or separated by blank lines."></textarea>
+    <div class="drawer-actions">
+      <label class="file-label">Choose a statement or backup file<input type="file" id="file-input" accept=".csv,.xls,.xlsx,.xml,.txt"></label>
+      <button class="btn" id="btn-parse">Read pasted messages</button>
+    </div>
+
+    <div class="how">
+      <h3>Where to get a statement</h3>
+      <ol>
+        <li><strong>ICICI</strong> — net banking → Bank Accounts → Statements → pick a date range → download as <code>.xls</code>.</li>
+        <li><strong>Credit cards</strong> — each issuer's net banking or app has a statement download; Excel or CSV beats PDF.</li>
+        <li>Statements carry a running balance, so this page can check every row adds up before it imports anything.</li>
+        <li>Messages still work: paste them above, or load an <code>sms-….xml</code> from SMS Backup &amp; Restore.</li>
+      </ol>
+    </div>
+    </div>
+
+    <div id="statement-step" class="step" hidden></div>
+  </div>
+</div>
+
+<div id="tip" hidden></div>
+<div id="toast" hidden></div>
+
+<script>
+/* ---- src/parse.js ---- */
+/**
+ * parse.js - turn one raw bank / card / UPI alert message into a structured record.
+ *
+ * Design note: Indian banks change their SMS templates constantly, and the same
+ * bank uses different wording for UPI vs card vs NEFT. So instead of one full-line
+ * regex per bank per channel (dozens of brittle rules), this extracts each FIELD
+ * independently and scores the result. A template tweak costs us one field, not
+ * the whole transaction.
+ */
+
+// ---------------------------------------------------------------- issuers
+
+// Matched against message body AND against the SMS sender ID (e.g. "AD-HDFCBK").
+const ISSUERS = [
+  { id: 'hdfc',    name: 'HDFC Bank',        body: /\bhdfc\b/i,                          sender: /HDFCBK|HDFCBN/i },
+  { id: 'icici',   name: 'ICICI Bank',       body: /\bicici\b/i,                         sender: /ICICIB|ICICIT|ICICIP/i },
+  { id: 'sbi',     name: 'SBI',              body: /\bsbi\b|\bstate bank\b/i,            sender: /SBIINB|SBICRD|SBIUPI|ATMSBI|SBIPSG/i },
+  { id: 'axis',    name: 'Axis Bank',        body: /\baxis\b/i,                          sender: /AXISBK|AXISBN/i },
+  { id: 'kotak',   name: 'Kotak',            body: /\bkotak\b/i,                         sender: /KOTAKB|KOTAKM/i },
+  { id: 'au',      name: 'AU Small Finance', body: /\bau (bank|small finance)\b/i,       sender: /AUBANK|AUSFBL/i },
+  { id: 'jupiter', name: 'Jupiter',          body: /\bjupiter\b/i,                       sender: /JUPITR|JUPITE/i },
+  { id: 'csb',     name: 'CSB Bank',         body: /\bcsb\b/i,                           sender: /CSBBNK|CSBANK/i },
+  { id: 'federal', name: 'Federal Bank',     body: /\bfederal\b/i,                       sender: /FEDBNK|FEDERL/i },
+  { id: 'paytm',   name: 'Paytm',            body: /\bpaytm\b/i,                         sender: /PAYTMB|PYTMPB/i },
+  { id: 'phonepe', name: 'PhonePe',          body: /\bphonepe\b/i,                       sender: /PHONPE|PHNPE/i },
+  { id: 'gpay',    name: 'Google Pay',       body: /\bgoogle pay\b|\bg-?pay\b/i,         sender: /GOOGPY|GPAYIN/i },
+  { id: 'amazonpay', name: 'Amazon Pay ICICI', body: /amazon pay icici/i,                sender: /AMZNPY/i },
+];
+
+function detectIssuer(text, sender) {
+  // Co-branded cards must win over the underlying bank, so check those first.
+  const ordered = [...ISSUERS].sort((a, b) => (a.id === 'amazonpay' ? -1 : b.id === 'amazonpay' ? 1 : 0));
+  for (const iss of ordered) {
+    if (sender && iss.sender.test(sender)) return iss;
+  }
+  for (const iss of ordered) {
+    if (iss.body.test(text)) return iss;
+  }
+  return null;
+}
+
+// ---------------------------------------------------------------- noise
+
+/**
+ * A bank SMS inbox is mostly not transactions. These are checked in order and the
+ * first hit wins, because a promo about a loan also contains the word "debited".
+ */
+const NOISE_RULES = [
+  { reason: 'otp',       re: /\b(otp|one[- ]time password|verification code)\b|do not share .{0,20}(otp|pin|cvv)/i },
+  { reason: 'upcoming',  re: /\bwill be (debited|deducted|charged|auto[- ]?debited)\b|\bis due\b|\bdue on\b|\bdue date\b|\bpre[- ]?debit notification\b/i },
+  { reason: 'failed',    re: /\b(has failed|was declined|is declined|unsuccessful|could not be processed|transaction failed)\b/i },
+  { reason: 'request',   re: /\b(has requested|collect request|payment request|requesting money)\b/i },
+  { reason: 'mandate',   re: /\b(e-?mandate|upi mandate|autopay (has been )?(set ?up|created|enabled))\b/i },
+  { reason: 'statement', re: /\b(statement|min(imum)? amt due|total amt due|min(imum)? amount due|total amount due|bill generated)\b/i },
+  { reason: 'promo',     re: /\b(pre[- ]?approved|apply now|click here|t&c apply|offer|cashback up ?to|% ?off|download the app|congratulations|eligible for)\b/i },
+];
+
+// ---------------------------------------------------------------- amounts
+
+// Matches "Rs.1,299.00", "INR 1299", "₹1,45,000", and the trailing "1299 INR" form.
+const MONEY_RE = /(?:(?:rs|inr|₹)\s*\.?\s*)([0-9][0-9,]*(?:\.[0-9]{1,2})?)|([0-9][0-9,]*(?:\.[0-9]{1,2})?)\s*(?:rs\b|inr\b|₹)/gi;
+
+/** What is this particular money figure? The txn amount, or the balance/limit trailer? */
+function classifyMoney(before) {
+  if (/\b(avl|available|closing|a\/c|acct)?\s*(bal|balance)\s*[:\-.]?\s*$/i.test(before)) return 'balance';
+  if (/\b(avl|available|credit|total)?\s*(lmt|limit)\s*[:\-.]?\s*$/i.test(before)) return 'limit';
+  if (/\bdue\s*[:\-.]?\s*$/i.test(before)) return 'due';
+  return 'amount';
+}
+
+function extractMoney(text) {
+  const found = { amount: null, balance: null, limit: null, due: null };
+  MONEY_RE.lastIndex = 0;
+  let m;
+  while ((m = MONEY_RE.exec(text)) !== null) {
+    const value = Number((m[1] || m[2]).replace(/,/g, ''));
+    if (!Number.isFinite(value)) continue;
+    const kind = classifyMoney(text.slice(Math.max(0, m.index - 32), m.index));
+    // First figure of each kind wins; later mentions are usually restatements.
+    if (found[kind] === null) found[kind] = value;
+  }
+  return found;
+}
+
+// ---------------------------------------------------------------- dates
+
+const MONTHS = { jan:1, feb:2, mar:3, apr:4, may:5, jun:6, jul:7, aug:8, sep:9, sept:9, oct:10, nov:11, dec:12 };
+
+function buildDate(y, mo, d) {
+  if (!(mo >= 1 && mo <= 12) || !(d >= 1 && d <= 31)) return null;
+  if (y < 100) y += 2000;
+  if (y < 2000 || y > 2100) return null;
+  const iso = `${y}-${String(mo).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+  // Reject impossible days (31 Feb) by round-tripping through Date.
+  const dt = new Date(iso + 'T00:00:00Z');
+  if (dt.getUTCDate() !== d || dt.getUTCMonth() + 1 !== mo) return null;
+  return iso;
+}
+
+/**
+ * Indian alerts are day-first. "04-09-25" is 4 September, never 9 April, so we
+ * never guess month-first - guessing would silently scatter spend across months.
+ */
+function extractDate(text) {
+  let m;
+  // ISO: 2025-09-11 (HDFC card alerts use this, sometimes with :HH:MM:SS appended)
+  if ((m = /\b(20\d{2})-(\d{1,2})-(\d{1,2})\b/.exec(text))) {
+    const d = buildDate(+m[1], +m[2], +m[3]);
+    if (d) return d;
+  }
+  // Alpha month: 04-Sep-25, 04 Sep 2025, 04Sep25
+  const alphaRe = /\b(\d{1,2})[-\/ ]?([A-Za-z]{3,4})[-\/ ]?(\d{2,4})\b/g;
+  while ((m = alphaRe.exec(text)) !== null) {
+    const mo = MONTHS[m[2].toLowerCase()];
+    if (!mo) continue;
+    const d = buildDate(+m[3], mo, +m[1]);
+    if (d) return d;
+  }
+  // Numeric day-first: 04-09-25, 04/09/2025, 04.09.25
+  const numRe = /\b(\d{1,2})[-\/.](\d{1,2})[-\/.](\d{2,4})\b/g;
+  while ((m = numRe.exec(text)) !== null) {
+    const d = buildDate(+m[3], +m[2], +m[1]);
+    if (d) return d;
+  }
+  return null;
+}
+
+// ---------------------------------------------------------------- direction
+
+const DEBIT_WORDS  = /\b(debited|debit|spent|sent|paid|withdrawn|withdrawal|purchase[d]?|deducted|transferred to|used for|used at|charged)\b/i;
+// Note: bare "credit" is deliberately absent - "Credit Card" appears in every
+// card spend alert and would flip every card purchase into income.
+const CREDIT_WORDS = /\b(credited|credit of|received|deposited|refund(ed)?|revers(ed|al)|cashback)\b/i;
+// Money coming back is unambiguous no matter what else the sentence says.
+const CREDIT_OVERRIDE = /\b(refund(ed)?|revers(ed|al)|cashback)\b/i;
+
+function extractDirection(text) {
+  if (CREDIT_OVERRIDE.test(text)) return 'credit';
+  const d = DEBIT_WORDS.exec(text);
+  const c = CREDIT_WORDS.exec(text);
+  if (d && c) return d.index <= c.index ? 'debit' : 'credit';
+  if (d) return 'debit';
+  if (c) return 'credit';
+  return null;
+}
+
+// ---------------------------------------------------------------- account
+
+/**
+ * Last 3-6 digits of the account or card. This is how we group spend per card,
+ * and it is also the only account detail the tracker ever needs.
+ */
+function extractAccount(text) {
+  const isCard = /\bcard\b|\bavl\s*(lmt|limit)\b|\bcredit card\b/i.test(text);
+  const m = /\b(a\/c|ac|acct|account|card)\s*(?:no\.?|number)?\s*[:#-]?\s*[xX*]*\s*(\d{3,6})\b/i.exec(text);
+  return {
+    tail: m ? m[2] : null,
+    type: isCard ? 'card' : 'bank',
+  };
+}
+
+// ---------------------------------------------------------------- counterparty
+
+const MERCHANT_PATTERNS = [
+  // UPI handle: swiggy@ybl -> "swiggy"
+  { re: /\b([a-zA-Z0-9][a-zA-Z0-9._-]{1,})@([a-z]{2,})\b/, pick: m => m[1] },
+  // Axis / SBI style structured info blocks: UPI/P2M/524712345678/SWIGGY
+  { re: /\bUPI[\/-](?:P2M|P2A)?[\/-]?\d*[\/-]([^\/.\s][^\/.]{1,40})/i, pick: m => m[1] },
+  // "Info: UPI-SWIGGY" / "Info:NEFT-RENT"
+  { re: /\bInfo\s*[:\-]\s*(?:UPI|NEFT|IMPS|ACH|POS)?[-: ]*([^.;]{2,40})/i, pick: m => m[1] },
+  // "-NEFT-LANDLORD" trailing tag
+  { re: /-(?:NEFT|IMPS|RTGS|ACH|POS|UPI)-([A-Za-z0-9 &._-]{2,40})/i, pick: m => m[1] },
+  // "at AMAZON on ..." / "to SWIGGY On ..." / "towards RENT" - the payee.
+  { re: /\b(?:at|to|towards)\s+([A-Za-z0-9][A-Za-z0-9&.,'\/ _-]{1,40}?)(?=\s+(?:on|dated|ref|upi|avl|txn|not|info)\b|[.;,]|$)/i, pick: m => m[1] },
+  // ICICI and Amazon Pay ICICI end with the payee: "... on 11-Sep-25 on AMAZON."
+  // Requiring a letter first is what separates the payee from the date "on".
+  { re: /\bon\s+([A-Za-z][A-Za-z0-9&.,'\/ _-]{1,40}?)(?=[.;,]|$)/i, pick: m => m[1] },
+  // "from SALARY" - only useful on credits; on a debit "from" names OUR account,
+  // so this runs last and the junk filter below drops account-shaped captures.
+  { re: /\bfrom\s+([A-Za-z0-9][A-Za-z0-9&.,'\/ _-]{1,40}?)(?=\s+(?:on|dated|ref|upi|avl|txn|not|info)\b|[.;,]|$)/i, pick: m => m[1] },
+  // "transfer to SWIGGY Ref No"
+  { re: /\btransfer(?:red)? to\s+([A-Za-z0-9][A-Za-z0-9&.,' _-]{1,40})/i, pick: m => m[1] },
+];
+
+const MERCHANT_JUNK = /^(your|the|a|an|account|a\/c|bank|card|us|you|customer|dispute|call)$/i;
+
+function extractMerchant(text) {
+  for (const { re, pick } of MERCHANT_PATTERNS) {
+    const m = re.exec(text);
+    if (!m) continue;
+    let name = pick(m)
+      .replace(/\s+/g, ' ')
+      .replace(/[.,;:\-\/]+$/, '')
+      .trim();
+    // Bank names leaking in from "from HDFC Bank A/C" are not merchants.
+    if (!name || name.length < 2 || MERCHANT_JUNK.test(name)) continue;
+    if (/\b(a\/c|acct|account|bank|card)\b/i.test(name) || /\d{4,}/.test(name)) continue;
+    if (/^(hdfc|icici|sbi|axis|kotak|au|csb|federal|jupiter)\s*(bank)?$/i.test(name)) continue;
+    return name;
+  }
+  return null;
+}
+
+// ---------------------------------------------------------------- reference
+
+function extractRef(text) {
+  const m = /\b(?:upi\s*)?(?:ref(?:erence)?|rrn|txn|transaction)\s*(?:no\.?|id|#)?\s*[:\-]?\s*([0-9]{6,20})\b/i.exec(text)
+    // Some templates carry the reference bare: "UPI:307012345678".
+    || /\bupi\s*[:\-]\s*([0-9]{9,20})\b/i.exec(text);
+  return m ? m[1] : null;
+}
+
+// ---------------------------------------------------------------- main
+
+/**
+ * @param {string} raw        message body
+ * @param {object} [meta]     { sender, receivedAt } - from an SMS export, when available
+ * @returns {object} record with kind 'txn' | 'noise'
+ */
+function parseMessage(raw, meta = {}) {
+  const text = String(raw || '').replace(/\s+/g, ' ').trim();
+  if (!text) return { kind: 'noise', reason: 'empty', raw };
+
+  for (const rule of NOISE_RULES) {
+    if (rule.re.test(text)) return { kind: 'noise', reason: rule.reason, raw: text };
+  }
+
+  const money = extractMoney(text);
+  const direction = extractDirection(text);
+
+  // No amount, or no sense of which way the money moved => not a transaction.
+  if (money.amount === null) return { kind: 'noise', reason: 'no-amount', raw: text };
+  if (!direction) return { kind: 'noise', reason: 'no-direction', raw: text };
+
+  const issuer = detectIssuer(text, meta.sender);
+  const account = extractAccount(text);
+  const date = extractDate(text) || (meta.receivedAt ? meta.receivedAt.slice(0, 10) : null);
+  const channel = detectChannel(text);
+  let merchant = extractMerchant(text);
+  if (!merchant && channel === 'atm') merchant = 'Cash withdrawal';
+  const ref = extractRef(text);
+
+  // Confidence drives the "needs review" queue - we never silently drop money.
+  let confidence = 0.5;
+  if (date) confidence += 0.2;
+  if (merchant) confidence += 0.15;
+  if (account.tail) confidence += 0.1;
+  if (ref) confidence += 0.05;
+  if (!extractDate(text) && meta.receivedAt) confidence -= 0.1; // date inferred, not stated
+
+  return {
+    kind: 'txn',
+    amount: money.amount,
+    direction,
+    date,
+    merchant,
+    ref,
+    balance: money.balance,
+    creditLimit: money.limit,
+    issuer: issuer ? issuer.name : null,
+    issuerId: issuer ? issuer.id : null,
+    account: account.tail,
+    accountType: account.type,
+    channel,
+    confidence: Math.round(Math.min(confidence, 1) * 100) / 100,
+    raw: text,
+  };
+}
+
+function detectChannel(text) {
+  if (/\bupi\b|@[a-z]{2,}\b/i.test(text)) return 'upi';
+  if (/\batm\b|withdraw/i.test(text)) return 'atm';
+  if (/\bcard\b|\bpos\b/i.test(text)) return 'card';
+  if (/\bneft\b|\bimps\b|\brtgs\b/i.test(text)) return 'transfer';
+  if (/\bach\b|\becs\b|\bnach\b/i.test(text)) return 'mandate';
+  return 'other';
+}
+
+/** Split a pasted blob into individual messages. Blank line, or one per line. */
+function splitMessages(blob) {
+  const text = String(blob || '').trim();
+  if (!text) return [];
+  const byBlank = text.split(/\n\s*\n+/).map(s => s.trim()).filter(Boolean);
+  // If the user pasted one message per line, blank-line splitting returns one
+  // giant chunk - fall back to line splitting when a chunk holds many messages.
+  if (byBlank.length === 1 && /\n/.test(text)) {
+    return text.split(/\n/).map(s => s.trim()).filter(Boolean);
+  }
+  return byBlank;
+}
+
+
+/* ---- src/categorize.js ---- */
+/**
+ * categorize.js - merchant string -> spending category.
+ *
+ * Seeded with Indian merchants, then sharpened by the user: every manual
+ * correction becomes a rule, so the tracker gets more accurate each month
+ * instead of needing the same fix over and over.
+ */
+
+const CATEGORIES = [
+  'Food & Dining', 'Groceries', 'Transport', 'Shopping', 'Bills & Utilities',
+  'Rent & Housing', 'Health', 'Entertainment', 'Travel', 'Education',
+  'Investments', 'Transfers', 'Cash', 'Fees & Charges', 'Income', 'Other',
+];
+
+/** Substring -> category. Ordered: the first match wins, so keep specifics first. */
+const SEED_RULES = [
+  ['Food & Dining',    ['swiggy','zomato','eatfit','dominos','domino','pizza','mcdonald','kfc','burger','starbucks','chaayos','third wave','blue tokai','cafe','coffee','restaurant','biryani','bakery','dineout','eazydiner','faasos','behrouz','wow momo','haldiram','barbeque','subway','dunkin','baskin','chai point']],
+  ['Groceries',        ['blinkit','zepto','instamart','bigbasket','bbdaily','dmart','d-mart','licious','freshtohome','country delight','more retail','reliance fresh','spencer','nature basket','milkbasket','grofers','jiomart','ratnadeep']],
+  ['Transport',        ['uber','ola ','olacabs','rapido','namma yatri','yulu','bounce','blusmart','blu smart','metro','bmtc','dmrc','fastag','petrol','fuel','hpcl','iocl','bpcl','indian oil','shell','nayara','park+','parking']],
+  ['Travel',           ['irctc','indigo','vistara','air india','akasa','spicejet','makemytrip','goibibo','yatra','cleartrip','ixigo','redbus','abhibus','oyo','airbnb','booking.com','agoda','trivago','easemytrip']],
+  ['Shopping',         ['amazon','flipkart','myntra','ajio','nykaa','meesho','tatacliq','tata cliq','snapdeal','decathlon','ikea','lifestyle','shoppers stop','westside','zara','h&m','uniqlo','croma','reliance digital','vijay sales','pepperfry','urban ladder','boat','firstcry']],
+  ['Bills & Utilities',['jio','airtel','vodafone','vi ','bsnl','act fibernet','hathway','excitel','tata play','dish tv','bescom','tneb','msedcl','adani electricity','tata power','torrent power','mahadiscom','bses','indraprastha gas','mahanagar gas','gail','hp gas','bharat gas','indane','water bill','broadband','recharge','electricity','postpaid','prepaid']],
+  ['Rent & Housing',   ['rent','landlord','nobroker','housing.com','magicbricks','maintenance','society','apartment','flat rent','pg ','hostel']],
+  ['Health',           ['apollo','pharmeasy','1mg','tata 1mg','netmeds','medplus','practo','cult','cultfit','gym','fitness','hospital','clinic','diagnostic','thyrocare','dr lal','metropolis','lenskart','titan eye','dental','pharmacy','medical']],
+  ['Entertainment',    ['netflix','spotify','hotstar','jiocinema','jiohotstar','prime video','sonyliv','zee5','youtube','bookmyshow','pvr','inox','cinepolis','audible','kindle','playstation','steam','xbox','nintendo','dream11','gaming']],
+  ['Education',        ['udemy','coursera','unacademy','byju','vedantu','upgrad','simplilearn','great learning','scaler','newton','physics wallah','tuition','school fee','college','university','exam fee','skillshare','duolingo']],
+  ['Investments',      ['zerodha','groww','upstox','angel one','angelone','icici direct','hdfc securities','kuvera','coin','indmoney','smallcase','paytm money','mutual fund','sip ','nps ','ppf','elss','nippon','sbi mf','axis mf','hdfc mf','icici pru','mirae','parag parikh','quant mf','lic ','term plan','insurance','policybazaar','gold bond','sgb']],
+  ['Transfers',        ['cred','credit card payment','cc payment','card payment','billdesk','autopay','own account','self transfer','to self','credit card bill']],
+  ['Cash',             ['atm','cash withdrawal','cash wdl','withdrawn']],
+  ['Fees & Charges',   ['charges','gst','annual fee','late fee','penalty','interest','service charge','processing fee','convenience fee','surcharge','amc ','renewal fee']],
+];
+
+/** Credits that are genuinely income rather than a refund or a transfer back. */
+const INCOME_HINTS = ['salary','sal cr','payroll','stipend','bonus','dividend','interest credit','reimbursement','freelance','consulting','payout'];
+
+function normKey(merchant) {
+  return String(merchant || '').toLowerCase().replace(/[^a-z0-9@. ]/g, ' ').replace(/\s+/g, ' ').trim();
+}
+
+/**
+ * @param {object} txn        parsed transaction
+ * @param {object} [rules]    learned overrides: { "<merchant key>": "<category>" }
+ * @returns {{category: string, source: 'user'|'seed'|'fallback'}}
+ */
+function categorize(txn, rules = {}) {
+  const key = normKey(txn.merchant);
+  const hay = `${key} ${String(txn.raw || '').toLowerCase()}`;
+
+  // A correction the user made always wins over our guesses.
+  if (key && rules[key]) return { category: rules[key], source: 'user' };
+
+  if (txn.direction === 'credit') {
+    if (/\b(refund|revers|cashback)\b/i.test(txn.raw || '')) return { category: 'Shopping', source: 'seed' };
+    if (INCOME_HINTS.some(h => hay.includes(h))) return { category: 'Income', source: 'seed' };
+    return { category: 'Income', source: 'fallback' };
+  }
+
+  for (const [category, needles] of SEED_RULES) {
+    if (needles.some(n => hay.includes(n))) return { category, source: 'seed' };
+  }
+  return { category: 'Other', source: 'fallback' };
+}
+
+/** Record a correction so the same merchant is never miscategorized twice. */
+function learnRule(rules, merchant, category) {
+  const key = normKey(merchant);
+  if (!key) return rules;
+  return { ...rules, [key]: category };
+}
+
+/** Flat list of every seed needle - used to recognise a merchant inside a
+ *  statement narration, where the counterparty is one segment among many. */
+const SEED_NEEDLES = SEED_RULES.flatMap(([, needles]) => needles).map(n => n.trim());
+
+
+
+/* ---- src/statement.js ---- */
+/**
+ * statement.js - read a bank or card statement into transactions.
+ *
+ * Statements beat alert messages on every axis that matters: they are complete
+ * (nothing depends on an SMS arriving), authoritative, and they carry a running
+ * balance, which lets us PROVE an import is correct rather than hope it is.
+ * See checkBalanceContinuity below - that check is the whole reason to prefer
+ * this path.
+ *
+ * The hard part is that no two banks agree on a layout, and most put several
+ * rows of preamble above the real header. So nothing here is hard-coded to one
+ * bank: we score candidate header rows, map columns by name, and hand the user
+ * the mapping to correct when scoring is not confident.
+ */
+
+
+/* ------------------------------------------------------------------ csv */
+
+/** Split CSV text into rows of cells. Handles quoted cells and embedded commas. */
+function parseCsv(text) {
+  const rows = [];
+  let row = [], cur = '', quoted = false;
+  const src = String(text).replace(/\r\n?/g, '\n');
+  for (let i = 0; i < src.length; i++) {
+    const c = src[i];
+    if (quoted) {
+      if (c === '"') { if (src[i + 1] === '"') { cur += '"'; i++; } else quoted = false; }
+      else cur += c;
+    } else if (c === '"') quoted = true;
+    else if (c === ',') { row.push(cur); cur = ''; }
+    else if (c === '\n') { row.push(cur); rows.push(row); row = []; cur = ''; }
+    else cur += c;
+  }
+  if (cur || row.length) { row.push(cur); rows.push(row); }
+  return rows.map(r => r.map(c => c.trim()));
+}
+
+/* ------------------------------------------------------------------ layout */
+
+/** Header names seen across Indian bank and card statements, by role. */
+const COLUMN_PATTERNS = {
+  date:      /^(transaction|txn|value|posting|tran\.?)?\s*date$|^date\b|^date of transaction/i,
+  narration: /narration|remarks|description|particulars|details|transaction remark|merchant|nature of transaction/i,
+  debit:     /withdrawal|^debit|debit amount|^dr\b|withdrawal amt|amount \(dr\)/i,
+  credit:    /deposit|^credit|credit amount|^cr\b|deposit amt|amount \(cr\)/i,
+  amount:    /^(transaction )?amount( \(inr\))?$|^amt$|^amount in inr$/i,
+  balance:   /balance|closing bal|available bal/i,
+  ref:       /cheque|ref(erence)?\s*(no|number)?|transaction id|txn id/i,
+};
+
+// "Withdrawal Amount (INR)" matches both `debit` and `amount`; the specific role wins.
+const ROLE_PRIORITY = ['date', 'balance', 'debit', 'credit', 'narration', 'ref', 'amount'];
+
+function scoreHeaderRow(cells) {
+  const roles = new Set();
+  for (const cell of cells) {
+    const v = String(cell || '').trim();
+    if (!v) continue;
+    for (const role of ROLE_PRIORITY) {
+      if (COLUMN_PATTERNS[role].test(v)) { roles.add(role); break; }
+    }
+  }
+  // A real header names a date and at least one money column.
+  if (!roles.has('date')) return { score: 0, roles };
+  if (!roles.has('debit') && !roles.has('credit') && !roles.has('amount')) return { score: 0, roles };
+  return { score: roles.size, roles };
+}
+
+/**
+ * Find the header row and map each role to a column index.
+ * Statements bury the header under account-holder and period rows, so we scan.
+ */
+function detectLayout(rows) {
+  let best = { score: 0, headerRow: -1 };
+  const limit = Math.min(rows.length, 30);
+  for (let i = 0; i < limit; i++) {
+    const { score } = scoreHeaderRow(rows[i]);
+    if (score > best.score) best = { score, headerRow: i };
+  }
+  if (best.headerRow === -1) return { headerRow: -1, map: {}, confident: false };
+
+  const header = rows[best.headerRow];
+  const map = {};
+  const taken = new Set();
+  // Where a statement carries several date columns, the transaction date is the
+  // one a person means; value date can differ by days.
+  const PREFERRED = { date: /transaction\s*date|txn\s*date/i };
+  for (const [role, pref] of Object.entries(PREFERRED)) {
+    for (let c = 0; c < header.length; c++) {
+      if (pref.test(String(header[c] || ''))) { map[role] = c; taken.add(c); break; }
+    }
+  }
+  for (const role of ROLE_PRIORITY) {
+    if (map[role] !== undefined) continue;
+    for (let c = 0; c < header.length; c++) {
+      if (taken.has(c)) continue;
+      const v = String(header[c] || '').trim();
+      if (v && COLUMN_PATTERNS[role].test(v)) { map[role] = c; taken.add(c); break; }
+    }
+  }
+  // Two money columns (withdrawal/deposit) or one signed column - never both.
+  if (map.debit !== undefined || map.credit !== undefined) delete map.amount;
+
+  return {
+    headerRow: best.headerRow,
+    header,
+    map,
+    confident: best.score >= 3 && map.date !== undefined &&
+      (map.amount !== undefined || map.debit !== undefined || map.credit !== undefined),
+  };
+}
+
+/* ------------------------------------------------------------------ cells */
+
+const EXCEL_EPOCH = Date.UTC(1899, 11, 30);
+
+/** Statement date cells arrive as strings, Date objects, or Excel serials. */
+function cellToDate(v) {
+  if (v == null || v === '') return null;
+  if (v instanceof Date && !isNaN(v)) return v.toISOString().slice(0, 10);
+  if (typeof v === 'number' && v > 20000 && v < 60000) {
+    return new Date(EXCEL_EPOCH + v * 864e5).toISOString().slice(0, 10);
+  }
+  return extractDate(String(v));
+}
+
+/** "1,299.00", "(1,299.00)" and "1299.00 Dr" all mean the same magnitude. */
+function cellToAmount(v) {
+  if (v == null || v === '') return null;
+  if (typeof v === 'number') return Number.isFinite(v) ? Math.abs(v) : null;
+  const s = String(v).trim();
+  if (!s || /^[-–—]$/.test(s)) return null;
+  const m = /-?[\d,]*\d(?:\.\d+)?/.exec(s.replace(/[₹]|rs\.?|inr/gi, ''));
+  if (!m) return null;
+  const n = Number(m[0].replace(/,/g, ''));
+  return Number.isFinite(n) ? Math.abs(n) : null;
+}
+
+function signOf(cell) {
+  const s = String(cell || '');
+  if (/\bcr\b|\bcredit\b/i.test(s)) return 'credit';
+  if (/\bdr\b|\bdebit\b/i.test(s)) return 'debit';
+  if (/^\s*\(.*\)\s*$/.test(s) || /^\s*-/.test(s)) return 'debit';
+  return null;
+}
+
+/* ------------------------------------------------------------------ narration */
+
+/** Scheme codes, routing noise and filler that are never the counterparty. */
+const NARRATION_NOISE = new Set([
+  'upi','mmt','imps','neft','rtgs','ach','nfs','vin','iin','top','si','inf','bil','pos','atw','atd',
+  'vps','ecs','nach','cms','int','chg','gst','dtax','gib','mat','eba','onl','idm','ttr','set','rev',
+  'vsi','npci','p2m','p2a','payment','from','to','ph','na','null','self','collect','pay','txn','ref',
+  'bpay','inft','tpt','ib','mb','and','the','for','via','by','dr','cr','inb','ecom','purchase',
+]);
+
+// An IFSC is four letters, a literal zero, then the branch code. The zero is
+// what distinguishes it from an ordinary long word like AMAZONIND.
+const LOOKS_LIKE_BANK_CODE = /^[A-Z]{4}0[A-Z0-9]{4,6}$/;
+const CHANNEL_HINTS = [
+  ['atm',      /\b(nfs|atw|atd|cash ?wdl|cash withdrawal|atm)\b/i],
+  ['upi',      /\bupi\b|@[a-z]{2,}/i],
+  ['card',     /\b(vin|pos|ecom|vps|purchase)\b/i],
+  ['mandate',  /\b(ach|ecs|nach|si)\b/i],
+  ['transfer', /\b(neft|imps|rtgs|mmt|inft|inft|tpt)\b/i],
+];
+
+/**
+ * Pull the counterparty out of a statement narration such as
+ * "UPI/307012345678/Payment from Ph/SWIGGY/YESB0YESBNK".
+ *
+ * @param {string} text
+ * @param {string[]} [knownMerchants] lowercase needles; a segment matching one
+ *        is almost certainly the merchant, which settles otherwise-tied segments.
+ */
+function parseNarration(text, knownMerchants = []) {
+  const raw = String(text || '').trim();
+  const out = { merchant: null, channel: 'other', ref: null, vpa: null };
+  if (!raw) return out;
+
+  for (const [channel, re] of CHANNEL_HINTS) {
+    if (re.test(raw)) { out.channel = channel; break; }
+  }
+
+  const refMatch = /\b(\d{9,18})\b/.exec(raw);
+  if (refMatch) out.ref = refMatch[1];
+
+  const vpa = /\b([a-zA-Z0-9][a-zA-Z0-9._-]{1,})@([a-z]{2,})\b/.exec(raw);
+  if (vpa) { out.vpa = `${vpa[1]}@${vpa[2]}`; out.merchant = cleanName(vpa[1]); return out; }
+
+  const segments = raw.split(/[\/|]+/).map(s => s.trim()).filter(Boolean);
+  const candidates = [];
+  for (const seg of segments) {
+    const words = seg.split(/\s+/).filter(w => !NARRATION_NOISE.has(w.toLowerCase()));
+    const cleaned = words.join(' ').replace(/[^A-Za-z0-9&.' -]/g, ' ').replace(/\s+/g, ' ').trim();
+    if (cleaned.length < 3) continue;
+    if (!/[A-Za-z]{3}/.test(cleaned)) continue;                 // needs real letters
+    if (/^\d+$/.test(cleaned.replace(/\s/g, ''))) continue;
+    // Only a single token can be a routing code; a multi-word segment is a name.
+    if (!/\s/.test(cleaned) && LOOKS_LIKE_BANK_CODE.test(cleaned)) continue;
+    if (NARRATION_NOISE.has(cleaned.toLowerCase())) continue;
+
+    const key = normKey(cleaned);
+    const known = knownMerchants.some(n => key.includes(n));
+    candidates.push({ text: cleaned, known, digits: (cleaned.match(/\d/g) || []).length });
+  }
+  if (!candidates.length) return out;
+
+  // A recognised merchant wins outright; then the least numeric segment; then the
+  // longest, since a counterparty name outruns a leftover scheme code like "SAL".
+  candidates.sort((a, b) =>
+    (b.known - a.known) || (a.digits - b.digits) || (b.text.length - a.text.length));
+  out.merchant = cleanName(candidates[0].text);
+  return out;
+}
+
+function cleanName(s) {
+  return String(s).replace(/\s+/g, ' ').replace(/^[^A-Za-z0-9]+|[^A-Za-z0-9]+$/g, '').slice(0, 48).trim();
+}
+
+/* ------------------------------------------------------------------ rows */
+
+/**
+ * Convert statement rows into transactions using a column mapping.
+ * @returns {{txns: object[], skipped: number}}
+ */
+function rowsToTransactions(rows, layout, opts = {}) {
+  const { map, headerRow } = layout;
+  const known = opts.knownMerchants || [];
+  const account = opts.account || null;
+  const issuer = opts.issuer || null;
+  const accountType = opts.accountType || 'bank';
+  const txns = [];
+  let skipped = 0;
+
+  // A lone amount column means one of two conventions: signed (negatives are
+  // debits, so a bare positive is a credit), or all-positive (every row a debit,
+  // as card statements list spends). One negative anywhere settles which.
+  let signedColumn = false;
+  if (map.amount !== undefined && map.debit === undefined && map.credit === undefined) {
+    for (let i = headerRow + 1; i < rows.length; i++) {
+      if (signOf(rows[i]?.[map.amount]) === 'debit') { signedColumn = true; break; }
+    }
+  }
+
+  for (let i = headerRow + 1; i < rows.length; i++) {
+    const row = rows[i];
+    if (!row || !row.length) continue;
+    const date = cellToDate(row[map.date]);
+    if (!date) { skipped++; continue; }
+
+    let amount = null, direction = null;
+    if (map.debit !== undefined || map.credit !== undefined) {
+      const dr = cellToAmount(row[map.debit]);
+      const cr = cellToAmount(row[map.credit]);
+      if (dr) { amount = dr; direction = 'debit'; }
+      else if (cr) { amount = cr; direction = 'credit'; }
+    } else if (map.amount !== undefined) {
+      amount = cellToAmount(row[map.amount]);
+      // A single amount column carries its sign in the cell, or in a Dr/Cr marker
+      // somewhere on the row.
+      direction = signOf(row[map.amount]) || signOf(row.join(' ')) ||
+        (signedColumn ? 'credit' : (opts.defaultDirection || 'debit'));
+    }
+    if (!amount) { skipped++; continue; }
+
+    const narration = map.narration !== undefined ? String(row[map.narration] || '') : '';
+    const parsed = parseNarration(narration, known);
+    const balance = map.balance !== undefined ? cellToAmount(row[map.balance]) : null;
+
+    txns.push({
+      kind: 'txn',
+      source: 'statement',
+      date,
+      amount,
+      direction,
+      merchant: parsed.merchant || (parsed.channel === 'atm' ? 'Cash withdrawal' : null),
+      channel: parsed.channel,
+      ref: (map.ref !== undefined && String(row[map.ref] || '').trim()) || parsed.ref || null,
+      balance,
+      issuer,
+      account,
+      accountType,
+      confidence: parsed.merchant ? 0.95 : 0.8,   // the amount and date are certain
+      raw: narration || `${date} ${amount}`,
+    });
+  }
+  return { txns, skipped };
+}
+
+/* ------------------------------------------------------------------ proof */
+
+/**
+ * A statement's running balance makes the import verifiable: for every
+ * consecutive pair, previous balance minus debit plus credit must equal the next
+ * balance. If that holds throughout, no row was dropped, duplicated or
+ * misparsed - a guarantee no message-based import can offer. Where it breaks, we
+ * name the row so it can be fixed rather than silently trusted.
+ */
+function checkBalanceContinuity(txns) {
+  const withBal = txns.filter(t => typeof t.balance === 'number' && Number.isFinite(t.balance));
+  if (withBal.length < 2) return { checked: 0, ok: true, breaks: [], available: false };
+
+  const breaks = [];
+  for (let i = 1; i < withBal.length; i++) {
+    const prev = withBal[i - 1], cur = withBal[i];
+    const delta = cur.direction === 'credit' ? cur.amount : -cur.amount;
+    const expected = prev.balance + delta;
+    if (Math.abs(expected - cur.balance) > 0.05) {
+      breaks.push({
+        index: i,
+        date: cur.date,
+        merchant: cur.merchant,
+        amount: cur.amount,
+        expected: Math.round(expected * 100) / 100,
+        actual: cur.balance,
+        gap: Math.round((cur.balance - expected) * 100) / 100,
+      });
+    }
+  }
+  return { checked: withBal.length, ok: breaks.length === 0, breaks, available: true };
+}
+
+
+/* ---- src/normalize.js ---- */
+/**
+ * normalize.js - turn a pile of parsed messages into a trustworthy ledger.
+ *
+ * The three things that quietly ruin a message-based tracker, all handled here:
+ *   1. Re-pasting an overlapping batch double-counts everything  -> dedupe().
+ *   2. A failed UPI payment is debited then reversed              -> netReversals().
+ *   3. Paying a credit card bill from your bank looks like fresh
+ *      spend, on top of the card purchases you already counted    -> Transfers excluded.
+ */
+
+
+const REVIEW_THRESHOLD = 0.7;
+
+/** Stable identity for a transaction, so the same alert never lands twice. */
+function dedupeKey(t) {
+  // A bank reference number is globally unique; prefer it when present.
+  if (t.ref) return `ref:${t.ref}:${t.amount}`;
+  return `d:${t.date || '?'}|${t.amount}|${t.account || '?'}|${normKey(t.merchant)}`;
+}
+
+/**
+ * Every identity a transaction answers to. One record can be known by its
+ * reference in one source and only by date+amount in another, so matching on a
+ * single key would let the same payment through twice.
+ */
+function dedupeKeys(t) {
+  const keys = [];
+  if (t.ref) keys.push(`ref:${t.ref}:${t.amount}`);
+  keys.push(`d:${t.date || '?'}|${t.amount}|${t.account || '?'}|${normKey(t.merchant)}`);
+  return keys;
+}
+
+/** Same money, same day, same account - used only to match ACROSS sources. */
+const crossKey = t => `x:${t.date || '?'}|${t.amount}|${t.account || '?'}`;
+
+/** Guard the cross-source match: two different payees are two transactions. */
+function merchantsCompatible(a, b) {
+  const x = normKey(a), y = normKey(b);
+  if (!x || !y) return true;
+  return x === y || x.includes(y) || y.includes(x);
+}
+
+/** Statements are complete and authoritative; an alert message is a notification
+ *  about the same event. When both describe one transaction, the statement wins. */
+const SOURCE_RANK = { statement: 3, manual: 2, sms: 1, undefined: 1 };
+const rankOf = t => SOURCE_RANK[t.source] ?? 1;
+
+function dedupe(txns) {
+  const rows = new Map();        // id -> transaction
+  const claims = new Map();      // any key -> id
+  const cross = new Map();       // cross key -> { id, source }
+  const order = [];
+  let duplicates = 0;
+
+  for (const t of txns) {
+    const keys = dedupeKeys(t);
+    const xk = crossKey(t);
+
+    let id = keys.map(k => claims.get(k)).find(Boolean);
+    if (!id) {
+      const c = cross.get(xk);
+      // Only across sources: within one source, two like-sized payments on one
+      // day are two payments, not a duplicate.
+      if (c && c.source !== t.source && merchantsCompatible(t.merchant, rows.get(c.id)?.merchant)) id = c.id;
+    }
+
+    if (!id) {
+      id = keys[0];
+      rows.set(id, { ...t, id });
+      order.push(id);
+      for (const k of keys) claims.set(k, id);
+      cross.set(xk, { id, source: t.source });
+      continue;
+    }
+
+    duplicates++;
+    const existing = rows.get(id);
+    if (rankOf(t) > rankOf(existing)) {
+      // Keep any category the user already corrected on the row being replaced,
+      // and keep the id so earlier claims still resolve.
+      rows.set(id, {
+        ...t, id,
+        category: existing.categorySource === 'user' ? existing.category : t.category,
+        categorySource: existing.categorySource === 'user' ? 'user' : t.categorySource,
+      });
+    }
+    for (const k of keys) if (!claims.has(k)) claims.set(k, id);
+  }
+  return { txns: order.map(k => rows.get(k)), duplicates };
+}
+
+/**
+ * A failed payment shows up as a debit and, days later, a matching credit.
+ * Counting both leaves the month looking like you spent and earned money you
+ * never did, so we pair them off and drop both from the totals.
+ */
+function netReversals(txns) {
+  const out = txns.map(t => ({ ...t }));
+  const isReversal = t => /\b(revers(ed|al)|refund(ed)?)\b/i.test(t.raw || '');
+  const credits = out.filter(t => t.direction === 'credit' && isReversal(t) && !t.netted);
+
+  for (const c of credits) {
+    const match = out.find(d =>
+      d.direction === 'debit' && !d.netted &&
+      Math.abs(d.amount - c.amount) < 0.01 &&
+      d.date && c.date &&
+      Math.abs(Date.parse(c.date) - Date.parse(d.date)) <= 7 * 864e5
+    );
+    if (match) {
+      match.netted = true;
+      c.netted = true;
+      c.nettedAgainst = match.id;
+    }
+  }
+  return out;
+}
+
+/**
+ * @param {object[]} parsed  output of parseMessage(), any kind
+ * @param {object} [opts]    { rules } learned category overrides
+ */
+function buildLedger(parsed, opts = {}) {
+  const rules = opts.rules || {};
+  const noise = parsed.filter(p => p.kind === 'noise');
+  const raw = parsed.filter(p => p.kind === 'txn');
+
+  const { txns: unique, duplicates } = dedupe(raw);
+  const categorized = unique.map(t => {
+    const { category, source } = categorize(t, rules);
+    return { ...t, category, categorySource: source };
+  });
+  const netted = netReversals(categorized);
+
+  return {
+    txns: netted.filter(t => t.confidence >= REVIEW_THRESHOLD),
+    // Low-confidence rows are surfaced, never dropped: a missed transaction is
+    // worse than a wrong one, because you cannot see what is not there.
+    review: netted.filter(t => t.confidence < REVIEW_THRESHOLD),
+    noise,
+    duplicates,
+  };
+}
+
+function monthOf(t) {
+  return t.date ? t.date.slice(0, 7) : 'unknown';
+}
+
+/** Categories that move money without consuming it. */
+const NON_SPEND = new Set(['Transfers', 'Investments']);
+
+function summarizeMonth(txns, month) {
+  const inMonth = txns.filter(t => monthOf(t) === month && !t.netted);
+  const debits = inMonth.filter(t => t.direction === 'debit');
+  const credits = inMonth.filter(t => t.direction === 'credit');
+
+  const sum = arr => Math.round(arr.reduce((a, t) => a + t.amount, 0) * 100) / 100;
+
+  const spendTxns = debits.filter(t => !NON_SPEND.has(t.category));
+  const income = sum(credits.filter(t => t.category === 'Income'));
+  const spend = sum(spendTxns);
+  const invested = sum(debits.filter(t => t.category === 'Investments'));
+  const transfers = sum(debits.filter(t => t.category === 'Transfers'));
+
+  const group = (arr, keyFn) => {
+    const map = new Map();
+    for (const t of arr) {
+      const k = keyFn(t) || 'Unknown';
+      const e = map.get(k) || { key: k, amount: 0, count: 0 };
+      e.amount += t.amount; e.count++;
+      map.set(k, e);
+    }
+    return [...map.values()]
+      .map(e => ({ ...e, amount: Math.round(e.amount * 100) / 100 }))
+      .sort((a, b) => b.amount - a.amount);
+  };
+
+  const byCategory = group(spendTxns, t => t.category);
+  for (const c of byCategory) c.pct = spend ? Math.round((c.amount / spend) * 1000) / 10 : 0;
+
+  const daily = group(spendTxns, t => t.date).sort((a, b) => a.key.localeCompare(b.key));
+
+  return {
+    month,
+    income, spend, invested, transfers,
+    net: Math.round((income - spend - invested) * 100) / 100,
+    savingsRate: income ? Math.round(((income - spend) / income) * 1000) / 10 : null,
+    txnCount: inMonth.length,
+    largest: spendTxns.slice().sort((a, b) => b.amount - a.amount)[0] || null,
+    byCategory,
+    byMerchant: group(spendTxns, t => t.merchant).slice(0, 15),
+    byAccount: group(debits, t => (t.issuer ? `${t.issuer} ${t.account ? '••' + t.account : ''}`.trim() : 'Unknown')),
+    daily,
+  };
+}
+
+/**
+ * Subscriptions hide in plain sight: the same merchant, roughly the same amount,
+ * in three or more different months.
+ */
+function detectRecurring(txns) {
+  const groups = new Map();
+  for (const t of txns) {
+    if (t.direction !== 'debit' || t.netted || !t.merchant) continue;
+    const k = normKey(t.merchant);
+    if (!groups.has(k)) groups.set(k, []);
+    groups.get(k).push(t);
+  }
+
+  const recurring = [];
+  for (const [key, list] of groups) {
+    const months = new Set(list.map(monthOf));
+    if (months.size < 3) continue;
+    const amounts = list.map(t => t.amount);
+    const avg = amounts.reduce((a, b) => a + b, 0) / amounts.length;
+    const stable = amounts.every(a => Math.abs(a - avg) <= Math.max(avg * 0.15, 5));
+    if (!stable) continue;
+    recurring.push({
+      merchant: list[0].merchant,
+      key,
+      avgAmount: Math.round(avg * 100) / 100,
+      months: months.size,
+      category: list[0].category,
+      annualized: Math.round(avg * 12 * 100) / 100,
+    });
+  }
+  return recurring.sort((a, b) => b.annualized - a.annualized);
+}
+
+function listMonths(txns) {
+  return [...new Set(txns.map(monthOf))].filter(m => m !== 'unknown').sort().reverse();
+}
+
+
+/* ---- src/ui.js ---- */
+/* ui.js - the tracker interface. Depends on parse/categorize/normalize, which the
+   build inlines above this file. */
+
+const INR = (n, frac = 0) => new Intl.NumberFormat('en-IN', {
+  style: 'currency', currency: 'INR', maximumFractionDigits: frac, minimumFractionDigits: frac,
+}).format(Number(n) || 0);
+
+const el = id => document.getElementById(id);
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const monthLabel = ym => {
+  if (!ym) return '';
+  const [y, m] = ym.split('-');
+  return new Date(Date.UTC(+y, +m - 1, 1)).toLocaleDateString('en-IN', { month: 'long', year: 'numeric', timeZone: 'UTC' });
+};
+
+const State = {
+  txns: [],        // every transaction, all months
+  review: [],
+  rules: {},
+  month: null,
+  tab: 'month',
+  sample: false,
+  store: null,
+  pending: null,
+  lastImport: null,
+};
+
+/* ------------------------------------------------------------------ storage */
+
+/** Capabilities are a per-view fact, and absent entirely outside claude.ai. */
+async function useCapability(name) {
+  try { return (await window.claude?.use?.(name)) ?? null; }
+  catch { return null; }
+}
+
+/**
+ * Durable storage when the page has it, per-browser storage when it doesn't.
+ * A month is one document: the store caps documents at 256 KiB, so raw message
+ * text is trimmed before it is written.
+ */
+const LS_KEY = 'expense-tracker-v1';
+
+function makeStore(db) {
+  if (!db) {
+    return {
+      kind: 'local',
+      async load() {
+        try { return JSON.parse(localStorage.getItem(LS_KEY) || 'null') || { months: {}, rules: {} }; }
+        catch { return { months: {}, rules: {} }; }
+      },
+      async save(data) {
+        try { localStorage.setItem(LS_KEY, JSON.stringify(data)); } catch { /* quota or blocked */ }
+      },
+    };
+  }
+  return {
+    kind: 'db',
+    async load() {
+      const [monthsSnap, rulesSnap] = await Promise.all([
+        db.collection('months').get(),
+        db.doc('meta/rules').get(),
+      ]);
+      const months = {};
+      for (const d of monthsSnap.docs) months[d.id] = (d.data() || {}).txns || [];
+      return { months, rules: (rulesSnap.exists && rulesSnap.data().rules) || {} };
+    },
+    async save(data, changedMonths) {
+      const jobs = [db.doc('meta/rules').set({ rules: data.rules })];
+      const months = changedMonths || Object.keys(data.months);
+      for (const ym of months) {
+        jobs.push(db.doc(`months/${ym}`).set({ txns: data.months[ym] || [], updatedAt: new Date().toISOString() }));
+      }
+      await Promise.all(jobs);
+    },
+  };
+}
+
+/** Keep stored rows small: the full alert text is only needed for review. */
+function forStorage(t) {
+  return { ...t, raw: t.confidence >= 0.7 ? String(t.raw || '').slice(0, 160) : t.raw };
+}
+
+function bucketByMonth(txns) {
+  const months = {};
+  for (const t of txns) {
+    const ym = monthOf(t);
+    (months[ym] = months[ym] || []).push(forStorage(t));
+  }
+  return months;
+}
+
+async function persist(changed) {
+  if (State.sample) return;  // sample data is never written to storage
+  const data = { months: bucketByMonth(State.txns.concat(State.review)), rules: State.rules };
+  try { await State.store.save(data, changed); }
+  catch (e) { toast('Could not save. Your changes are on screen but not stored.'); }
+}
+
+/* ------------------------------------------------------------------ import */
+
+/** SMS Backup & Restore writes one <sms> per message; type="1" means received. */
+function readSmsXml(text) {
+  const doc = new DOMParser().parseFromString(text, 'application/xml');
+  if (doc.querySelector('parsererror')) return null;
+  const out = [];
+  for (const node of doc.querySelectorAll('sms')) {
+    if (node.getAttribute('type') !== '1') continue;   // skip messages we sent
+    const body = node.getAttribute('body');
+    if (!body) continue;
+    const ms = Number(node.getAttribute('date'));
+    out.push({
+      body,
+      sender: node.getAttribute('address') || '',
+      receivedAt: Number.isFinite(ms) && ms > 0 ? new Date(ms).toISOString() : null,
+    });
+  }
+  return out;
+}
+
+function readCsv(text) {
+  const rows = text.split(/\r?\n/).filter(Boolean).map(line => {
+    const cells = []; let cur = '', q = false;
+    for (let i = 0; i < line.length; i++) {
+      const c = line[i];
+      if (c === '"') { if (q && line[i + 1] === '"') { cur += '"'; i++; } else q = !q; }
+      else if (c === ',' && !q) { cells.push(cur); cur = ''; }
+      else cur += c;
+    }
+    cells.push(cur);
+    return cells;
+  });
+  if (!rows.length) return [];
+  const head = rows[0].map(h => h.toLowerCase().trim());
+  const bodyCol = head.findIndex(h => /body|message|text|description|narration/.test(h));
+  if (bodyCol === -1) return null;
+  const dateCol = head.findIndex(h => /date|time/.test(h));
+  const fromCol = head.findIndex(h => /address|sender|from/.test(h));
+  return rows.slice(1).filter(r => r[bodyCol]).map(r => ({
+    body: r[bodyCol],
+    sender: fromCol > -1 ? r[fromCol] : '',
+    receivedAt: dateCol > -1 && !isNaN(Date.parse(r[dateCol])) ? new Date(r[dateCol]).toISOString() : null,
+  }));
+}
+
+/** Accepts everything the import drawer offers and returns parse-ready messages. */
+function toMessages(text, filename = '') {
+  if (/\.xml$/i.test(filename) || /^\s*<\?xml|<smses/i.test(text)) {
+    const sms = readSmsXml(text);
+    if (sms) return sms;
+  }
+  if (/\.csv$/i.test(filename) || /,/.test(text.split('\n')[0] || '')) {
+    const csv = readCsv(text);
+    if (csv && csv.length) return csv;
+  }
+  return splitMessages(text).map(body => ({ body, sender: '', receivedAt: null }));
+}
+
+/* --------------------------------------------------------------- statements */
+
+const ROLE_LABELS = {
+  date: 'Date', narration: 'Description', debit: 'Withdrawal',
+  credit: 'Deposit', amount: 'Amount', balance: 'Balance', ref: 'Reference',
+};
+
+/** Pull the account and bank out of the rows above the header, so the common
+ *  case needs no typing at all. */
+function guessAccountMeta(rows, headerRow, filename) {
+  // Only the preamble is trustworthy for this: narrations are full of OTHER
+  // banks' names (the payee's bank on every transfer), so scanning the rows
+  // would confidently label an ICICI statement "HDFC". Blank beats wrong - the
+  // field is right there to type into.
+  const preamble = rows.slice(0, Math.max(headerRow, 0)).flat().join(' ');
+  const iss = detectIssuer(preamble, '') || detectIssuer(filename || '', '');
+  const m = /(?:account|a\/c|card)\s*(?:number|no\.?)?\s*[:\-]?\s*([\dxX*]{6,20})/i.exec(preamble);
+  const digits = m ? m[1].replace(/\D/g, '') : '';
+  return { issuer: iss ? iss.name : '', account: digits.slice(-4) || '' };
+}
+
+async function readSpreadsheet(file) {
+  if (/\.csv$/i.test(file.name)) return parseCsv(await file.text());
+  if (typeof XLSX === 'undefined') {
+    toast('Excel support did not load. Re-download the statement as CSV.');
+    return null;
+  }
+  const wb = XLSX.read(await file.arrayBuffer(), { type: 'array', cellDates: true });
+  const sheet = wb.Sheets[wb.SheetNames[0]];
+  return XLSX.utils.sheet_to_json(sheet, { header: 1, raw: true, defval: '' });
+}
+
+/** Show what was found and let it be corrected before anything is imported. */
+function openStatementStep(rows, layout, filename) {
+  const meta = guessAccountMeta(rows, layout.headerRow, filename);
+  State.pending = { rows, layout, filename, ...meta };
+  el('paste-step').hidden = true;
+  renderStatementStep();
+}
+
+function renderStatementStep() {
+  const { rows, layout, filename, issuer, account } = State.pending;
+  const header = layout.header || [];
+  const colOptions = role => [`<option value="">— none —</option>`]
+    .concat(header.map((h, i) =>
+      `<option value="${i}"${layout.map[role] === i ? ' selected' : ''}>${esc(String(h || `Column ${i + 1}`).trim() || `Column ${i + 1}`)}</option>`))
+    .join('');
+
+  const { txns } = rowsToTransactions(rows, layout, {
+    knownMerchants: SEED_NEEDLES, issuer, account: account || null,
+  });
+  const check = checkBalanceContinuity(txns);
+
+  el('statement-step').hidden = false;
+  el('statement-step').innerHTML = `
+    <p class="drawer-sub">Read <strong>${esc(filename)}</strong> — found ${txns.length} transaction${txns.length === 1 ? '' : 's'}.
+      Check the columns below, then import.</p>
+
+    <div class="acct-row">
+      <label>Bank or card<input id="st-issuer" type="text" value="${esc(issuer)}" placeholder="ICICI Bank"></label>
+      <label>Last 4 digits<input id="st-account" type="text" maxlength="4" value="${esc(account)}" placeholder="7890"></label>
+    </div>
+
+    <div class="map-grid">
+      ${Object.keys(ROLE_LABELS).map(role => `
+        <label>${ROLE_LABELS[role]}
+          <select data-role="${role}">${colOptions(role)}</select>
+        </label>`).join('')}
+    </div>
+
+    ${balanceCheckHtml(check, txns.length)}
+
+    ${txns.length ? `<div class="preview"><table>
+      <thead><tr><th>Date</th><th>Description</th><th class="num">Amount</th><th class="num">Balance</th></tr></thead>
+      <tbody>${txns.slice(0, 8).map(t => `<tr>
+        <td class="mono">${esc(t.date)}</td>
+        <td>${esc(t.merchant || '—')}</td>
+        <td class="num mono ${t.direction === 'credit' ? 'is-credit' : ''}">${t.direction === 'credit' ? '+' : '−'}${INR(t.amount, 2)}</td>
+        <td class="num mono dim">${t.balance == null ? '—' : INR(t.balance, 2)}</td>
+      </tr>`).join('')}</tbody></table></div>` : ''}
+
+    <div class="drawer-actions">
+      <button class="btn btn-primary" id="btn-commit-statement"${txns.length ? '' : ' disabled'}>Import ${txns.length} transaction${txns.length === 1 ? '' : 's'}</button>
+      <button class="btn btn-ghost" id="btn-back-to-paste">Back</button>
+    </div>`;
+
+  for (const sel of el('statement-step').querySelectorAll('select[data-role]')) {
+    sel.addEventListener('change', e => {
+      const role = e.target.dataset.role;
+      const v = e.target.value;
+      if (v === '') delete State.pending.layout.map[role];
+      else State.pending.layout.map[role] = Number(v);
+      renderStatementStep();
+    });
+  }
+  for (const id of ['st-issuer', 'st-account']) {
+    el(id).addEventListener('input', e => {
+      State.pending[id === 'st-issuer' ? 'issuer' : 'account'] = e.target.value.trim();
+    });
+  }
+  el('btn-commit-statement').addEventListener('click', commitStatement);
+  el('btn-back-to-paste').addEventListener('click', () => {
+    State.pending = null;
+    el('statement-step').hidden = true;
+    el('paste-step').hidden = false;
+  });
+}
+
+/**
+ * The running balance is what makes a statement import verifiable rather than
+ * merely plausible, so the result is shown before anything is committed.
+ */
+function balanceCheckHtml(check, total) {
+  if (!check.available) {
+    return `<div class="check check-none"><strong>No balance column to check against</strong>
+      The amounts will import as they are, but nothing can confirm the file is complete.
+      Re-download with the balance column if your bank offers it.</div>`;
+  }
+  if (check.ok) {
+    return `<div class="check check-ok"><strong>All ${check.checked} rows add up</strong>
+      Every row matches the statement's own running balance, so nothing is missing,
+      duplicated or misread.</div>`;
+  }
+  return `<div class="check check-bad"><strong>${check.breaks.length} row${check.breaks.length === 1 ? '' : 's'} do not add up</strong>
+    ${check.checked} rows were checked against the running balance. These do not reconcile —
+    usually a column mapped to the wrong role, or a statement that starts mid-day:
+    <ul>${check.breaks.slice(0, 5).map(b =>
+      `<li>${esc(b.date)} ${esc(b.merchant || '')} — off by ${INR(b.gap, 2)}</li>`).join('')}</ul></div>`;
+}
+
+async function commitStatement() {
+  const { rows, layout, issuer, account } = State.pending;
+  const { txns } = rowsToTransactions(rows, layout, {
+    knownMerchants: SEED_NEEDLES, issuer: issuer || null, account: account || null,
+  });
+  if (!txns.length) { toast('Nothing to import.'); return; }
+
+  // Sample rows are a demonstration, not data: a real import replaces them
+  // outright rather than merging with them.
+  const existing = State.sample ? [] : State.txns.concat(State.review);
+  const combined = buildLedger(
+    existing.map(t => ({ ...t, kind: 'txn' })).concat(txns),
+    { rules: State.rules },
+  );
+  const added = combined.txns.length + combined.review.length - existing.length;
+  State.sample = false;
+  State.txns = combined.txns;
+  State.review = combined.review;
+  State.pending = null;
+
+  const months = listMonths(State.txns);
+  if (!months.includes(State.month)) State.month = months[0] || State.month;
+  await persist();
+  render();
+  closeDrawer();
+  toast(`Imported ${added} new transaction${added === 1 ? '' : 's'}${combined.duplicates ? `, skipped ${combined.duplicates} already tracked` : ''}.`);
+}
+
+async function importText(text, filename) {
+  const messages = toMessages(text, filename);
+  if (!messages.length) { toast('No messages found in that text.'); return; }
+
+  const parsed = messages.map(m => parseMessage(m.body, { sender: m.sender, receivedAt: m.receivedAt }));
+  const existing = State.sample ? [] : State.txns.concat(State.review);   // see commitStatement
+  const combined = buildLedger(
+    existing.map(t => ({ ...t, kind: 'txn' })).concat(parsed),
+    { rules: State.rules },
+  );
+
+  const added = combined.txns.length + combined.review.length - existing.length;
+  State.sample = false;
+  State.txns = combined.txns;
+  State.review = combined.review;
+  State.lastImport = {
+    scanned: messages.length,
+    added,
+    duplicates: combined.duplicates,
+    ignored: combined.noise.length,
+    review: combined.review.length,
+  };
+
+  const months = listMonths(State.txns);
+  if (!months.includes(State.month)) State.month = months[0] || State.month;
+  await persist();
+  render();
+  closeDrawer();
+  toast(added > 0
+    ? `Added ${added} transaction${added === 1 ? '' : 's'}.`
+    : 'Nothing new - those messages were already tracked.');
+}
+
+/* ------------------------------------------------------------------ actions */
+
+async function setCategory(txnId, category) {
+  const t = State.txns.find(x => x.id === txnId);
+  if (!t) return;
+  State.rules = learnRule(State.rules, t.merchant, category);
+  // Apply the correction everywhere that merchant appears, past and future.
+  const key = normKey(t.merchant);
+  let touched = 0;
+  for (const x of State.txns) {
+    if (normKey(x.merchant) === key && x.direction === 'debit') { x.category = category; x.categorySource = 'user'; touched++; }
+  }
+  await persist();
+  render();
+  if (touched > 1) toast(`${t.merchant} is now ${category} - updated ${touched} transactions.`);
+}
+
+async function confirmReview(idx) {
+  const row = State.review[idx];
+  const amount = Number(el(`rv-amt-${idx}`).value);
+  const date = el(`rv-date-${idx}`).value;
+  const merchant = el(`rv-mer-${idx}`).value.trim();
+  if (!Number.isFinite(amount) || amount <= 0 || !date) { toast('Enter a valid amount and date.'); return; }
+  const fixed = { ...row, amount, date, merchant, confidence: 1 };
+  fixed.category = categorize(fixed, State.rules).category;
+  fixed.id = dedupeKey(fixed);
+  State.review.splice(idx, 1);
+  State.txns.push(fixed);
+  if (!listMonths(State.txns).includes(State.month)) State.month = monthOf(fixed);
+  await persist();
+  render();
+}
+
+async function dropReview(idx) {
+  State.review.splice(idx, 1);
+  await persist();
+  render();
+}
+
+async function clearAll() {
+  if (!confirm('Delete every transaction stored here? This cannot be undone.')) return;
+  const months = Object.keys(bucketByMonth(State.txns.concat(State.review)));
+  State.txns = []; State.review = []; State.lastImport = null; State.sample = false;
+  try { await State.store.save({ months: Object.fromEntries(months.map(m => [m, []])), rules: State.rules }, months); }
+  catch { /* surfaced below */ }
+  render();
+  toast('All transactions deleted.');
+}
+
+async function exportCsv() {
+  const rows = [['date', 'amount', 'direction', 'merchant', 'category', 'issuer', 'account', 'channel', 'reference']];
+  for (const t of State.txns.slice().sort((a, b) => (a.date || '').localeCompare(b.date || ''))) {
+    rows.push([t.date || '', t.amount, t.direction, t.merchant || '', t.category, t.issuer || '', t.account || '', t.channel, t.ref || '']);
+  }
+  const csv = rows.map(r => r.map(c => /[",\n]/.test(String(c)) ? `"${String(c).replace(/"/g, '""')}"` : String(c)).join(',')).join('\n');
+  const dl = await useCapability('downloads');
+  if (!dl) { toast('Downloads are not available in this view.'); return; }
+  try { await dl.save({ filename: `transactions-${new Date().toISOString().slice(0, 10)}.csv`, data: csv }); }
+  catch { /* viewer declined */ }
+}
+
+/* ------------------------------------------------------------------ charts */
+
+/** Horizontal bars: length carries magnitude, so colour is not asked to. */
+function categoryBars(rows, total) {
+  if (!rows.length) return `<p class="empty">No spending recorded this month.</p>`;
+  const max = rows[0].amount || 1;
+  return `<div class="bars">` + rows.map(r => `
+    <div class="bar-row">
+      <div class="bar-label" title="${esc(r.key)}">${esc(r.key)}</div>
+      <div class="bar-track"><div class="bar-fill" style="width:${Math.max((r.amount / max) * 100, 1.5)}%"></div></div>
+      <div class="bar-value">${INR(r.amount)}<span class="bar-pct">${r.pct}%</span></div>
+    </div>`).join('') + `</div>`;
+}
+
+/** Thin columns for a time series. HTML rather than SVG so labels cannot overflow. */
+function columnChart(points, { format = INR, labelEvery = 1 } = {}) {
+  if (!points.length) return `<p class="empty">Nothing to plot yet.</p>`;
+  const max = Math.max(...points.map(p => p.value), 1);
+  return `<div class="cols" role="img" aria-label="${esc(points.map(p => `${p.label}: ${format(p.value)}`).join(', '))}">` +
+    points.map((p, i) => `
+      <div class="col" data-tip="${esc(p.label)} &middot; ${esc(format(p.value))}">
+        <div class="col-bar" style="height:${Math.max((p.value / max) * 100, 2)}%"></div>
+        <div class="col-label">${i % labelEvery === 0 ? esc(p.short ?? p.label) : ''}</div>
+      </div>`).join('') + `</div>`;
+}
+
+/* ------------------------------------------------------------------ render */
+
+function render() {
+  const months = listMonths(State.txns);
+  if (!State.month || (!months.includes(State.month) && months.length)) State.month = months[0];
+  renderHeader(months);
+  el('view').innerHTML = State.tab === 'month' ? monthView() : trendsView();
+  el('review-panel').innerHTML = reviewPanel();
+  wireView();
+}
+
+function renderHeader(months) {
+  const opts = months.length
+    ? months.map(m => `<option value="${m}"${m === State.month ? ' selected' : ''}>${esc(monthLabel(m))}</option>`).join('')
+    : `<option>No data yet</option>`;
+  el('month-select').innerHTML = opts;
+  el('month-select').disabled = !months.length;
+  for (const t of ['month', 'trends']) el(`tab-${t}`).setAttribute('aria-selected', String(State.tab === t));
+  el('sample-banner').hidden = !State.sample;
+  el('storage-note').textContent = State.store.kind === 'db'
+    ? 'Saved to this page'
+    : 'Saved in this browser only';
+}
+
+function monthView() {
+  const s = summarizeMonth(State.txns, State.month);
+  const prevMonths = listMonths(State.txns).filter(m => m < State.month);
+  const prev = prevMonths.length ? summarizeMonth(State.txns, prevMonths[0]) : null;
+  const delta = prev && prev.spend ? Math.round(((s.spend - prev.spend) / prev.spend) * 1000) / 10 : null;
+
+  const daily = s.daily.map(d => ({ label: d.key, short: String(+d.key.slice(8)), value: d.amount }));
+
+  return `
+  <section class="summary">
+    <div class="tile tile-lead">
+      <span class="tile-label">Spent</span>
+      <span class="figure">${INR(s.spend)}</span>
+      ${delta === null ? `<span class="tile-sub">${s.txnCount} transactions</span>`
+        : `<span class="tile-sub ${delta > 0 ? 'is-up' : 'is-down'}">${delta > 0 ? '▲' : '▼'} ${Math.abs(delta)}% vs ${esc(monthLabel(prevMonths[0]).split(' ')[0])}</span>`}
+    </div>
+    <div class="tile">
+      <span class="tile-label">Money in</span>
+      <span class="figure-sm">${INR(s.income)}</span>
+      <span class="tile-sub">${s.income ? 'recorded as income' : 'no income alerts yet'}</span>
+    </div>
+    <div class="tile">
+      <span class="tile-label">Left over</span>
+      <span class="figure-sm ${s.net < 0 ? 'is-negative' : ''}">${INR(s.net)}</span>
+      <span class="tile-sub">${s.savingsRate === null ? 'needs an income alert' : `${s.savingsRate}% of money in`}</span>
+    </div>
+    <div class="tile">
+      <span class="tile-label">Invested</span>
+      <span class="figure-sm">${INR(s.invested)}</span>
+      <span class="tile-sub">not counted as spending</span>
+    </div>
+  </section>
+
+  <div class="grid-2">
+    <section class="panel">
+      <h2>Where it went</h2>
+      ${categoryBars(s.byCategory, s.spend)}
+    </section>
+    <section class="panel">
+      <h2>Day by day</h2>
+      ${columnChart(daily, { labelEvery: daily.length > 16 ? 5 : 2 })}
+      ${s.largest ? `<p class="note">Biggest single spend: <strong>${INR(s.largest.amount)}</strong> at ${esc(s.largest.merchant || 'unknown')} on ${esc(s.largest.date)}.</p>` : ''}
+    </section>
+  </div>
+
+  <section class="panel">
+    <h2>Transactions <span class="count">${s.txnCount}</span></h2>
+    ${txnTable()}
+  </section>`;
+}
+
+function txnTable() {
+  const rows = State.txns
+    .filter(t => monthOf(t) === State.month)
+    .sort((a, b) => (b.date || '').localeCompare(a.date || '') || b.amount - a.amount);
+  if (!rows.length) return `<p class="empty">No transactions for ${esc(monthLabel(State.month))} yet.</p>`;
+
+  const opts = c => CATEGORIES.map(x => `<option${x === c ? ' selected' : ''}>${x}</option>`).join('');
+  return `<div class="table-wrap"><table>
+    <thead><tr><th>Date</th><th>Merchant</th><th>Category</th><th>Account</th><th class="num">Amount</th></tr></thead>
+    <tbody>${rows.map(t => `
+      <tr${t.netted ? ' class="is-netted"' : ''}>
+        <td class="mono">${esc((t.date || '').slice(5))}</td>
+        <td>
+          <span class="merchant">${esc(t.merchant || 'Unknown')}</span>
+          ${t.netted ? '<span class="chip chip-muted">reversed</span>' : ''}
+          ${t.channel === 'atm' ? '<span class="chip">cash</span>' : ''}
+        </td>
+        <td><select class="cat-select" data-id="${esc(t.id)}" aria-label="Category for ${esc(t.merchant || 'transaction')}">${opts(t.category)}</select></td>
+        <td class="mono dim">${esc(t.issuer || '—')}${t.account ? ` ••${esc(t.account)}` : ''}</td>
+        <td class="num mono ${t.direction === 'credit' ? 'is-credit' : ''}">${t.direction === 'credit' ? '+' : ''}${INR(t.amount, 2)}</td>
+      </tr>`).join('')}
+    </tbody></table></div>`;
+}
+
+function trendsView() {
+  const months = listMonths(State.txns).slice().reverse();
+  const series = months.map(m => {
+    const s = summarizeMonth(State.txns, m);
+    return { label: monthLabel(m), short: monthLabel(m).slice(0, 3), value: s.spend, s };
+  });
+  const recurring = detectRecurring(State.txns);
+  const avg = series.length ? Math.round(series.reduce((a, p) => a + p.value, 0) / series.length) : 0;
+
+  return `
+  <section class="panel">
+    <h2>Spending by month</h2>
+    ${series.length < 2
+      ? `<p class="empty">Import a few months of messages to see a trend.</p>`
+      : `${columnChart(series)}<p class="note">Average across ${series.length} months: <strong>${INR(avg)}</strong>.</p>`}
+  </section>
+
+  <section class="panel">
+    <h2>Recurring payments</h2>
+    ${!recurring.length
+      ? `<p class="empty">Nothing repeating yet — this needs three months of messages to spot a pattern.</p>`
+      : `<div class="table-wrap"><table>
+          <thead><tr><th>Merchant</th><th>Category</th><th class="num">Typical</th><th class="num">Per year</th></tr></thead>
+          <tbody>${recurring.map(r => `
+            <tr><td class="merchant">${esc(r.merchant)}</td><td class="dim">${esc(r.category)}</td>
+            <td class="num mono">${INR(r.avgAmount)}</td><td class="num mono">${INR(r.annualized)}</td></tr>`).join('')}
+          </tbody></table></div>
+         <p class="note">Seen in ${recurring[0].months}+ separate months at a steady amount. Cancelling the top one saves ${INR(recurring[0].annualized)} a year.</p>`}
+  </section>
+
+  <section class="panel">
+    <h2>Category by month</h2>
+    ${series.length < 2 ? `<p class="empty">Needs at least two months.</p>` : catTrendTable(months)}
+  </section>`;
+}
+
+function catTrendTable(months) {
+  const recent = months.slice(-6);
+  const sums = recent.map(m => summarizeMonth(State.txns, m));
+  const cats = [...new Set(sums.flatMap(s => s.byCategory.map(c => c.key)))];
+  const totalFor = (s, c) => (s.byCategory.find(x => x.key === c) || { amount: 0 }).amount;
+  cats.sort((a, b) => sums.reduce((n, s) => n + totalFor(s, b), 0) - sums.reduce((n, s) => n + totalFor(s, a), 0));
+
+  return `<div class="table-wrap"><table>
+    <thead><tr><th>Category</th>${recent.map(m => `<th class="num">${esc(monthLabel(m).slice(0, 3))}</th>`).join('')}</tr></thead>
+    <tbody>${cats.map(c => `<tr><td>${esc(c)}</td>${sums.map(s => {
+      const v = totalFor(s, c);
+      return `<td class="num mono ${v ? '' : 'dim'}">${v ? INR(v) : '—'}</td>`;
+    }).join('')}</tr>`).join('')}</tbody></table></div>`;
+}
+
+function reviewPanel() {
+  if (!State.review.length) return '';
+  return `<section class="panel panel-review">
+    <h2>Needs a look <span class="count count-warn">${State.review.length}</span></h2>
+    <p class="note">These messages carried an amount we could not fully read. Nothing here counts towards your totals until you confirm it.</p>
+    ${State.review.map((r, i) => `
+      <div class="review-row">
+        <p class="review-raw">${esc(r.raw)}</p>
+        <div class="review-fields">
+          <label>Amount<input id="rv-amt-${i}" type="number" step="0.01" value="${r.amount ?? ''}"></label>
+          <label>Date<input id="rv-date-${i}" type="date" value="${esc(r.date || '')}"></label>
+          <label>Merchant<input id="rv-mer-${i}" type="text" value="${esc(r.merchant || '')}" placeholder="Who was paid"></label>
+          <button class="btn btn-sm" data-review-add="${i}">Add it</button>
+          <button class="btn btn-sm btn-ghost" data-review-drop="${i}">Not a transaction</button>
+        </div>
+      </div>`).join('')}
+  </section>`;
+}
+
+/* ------------------------------------------------------------------ wiring */
+
+function wireView() {
+  for (const sel of document.querySelectorAll('.cat-select')) {
+    sel.addEventListener('change', e => setCategory(e.target.dataset.id, e.target.value));
+  }
+  for (const b of document.querySelectorAll('[data-review-add]')) {
+    b.addEventListener('click', () => confirmReview(+b.dataset.reviewAdd));
+  }
+  for (const b of document.querySelectorAll('[data-review-drop]')) {
+    b.addEventListener('click', () => dropReview(+b.dataset.reviewDrop));
+  }
+  const tip = el('tip');
+  for (const c of document.querySelectorAll('.col')) {
+    c.addEventListener('pointerenter', e => {
+      tip.innerHTML = c.dataset.tip; tip.hidden = false;
+      const r = c.getBoundingClientRect();
+      tip.style.left = `${r.left + r.width / 2}px`;
+      tip.style.top = `${r.top - 10}px`;
+    });
+    c.addEventListener('pointerleave', () => { tip.hidden = true; });
+  }
+}
+
+let toastTimer;
+function toast(msg) {
+  const t = el('toast');
+  t.textContent = msg; t.hidden = false;
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => { t.hidden = true; }, 4000);
+}
+
+function openDrawer() { el('drawer').hidden = false; el('paste-box').focus(); }
+function closeDrawer() {
+  el('drawer').hidden = true;
+  el('paste-box').value = '';
+  State.pending = null;
+  el('statement-step').hidden = true;
+  el('statement-step').innerHTML = '';
+  el('paste-step').hidden = false;
+}
+
+/* ------------------------------------------------------------------ sample */
+
+const SAMPLE_MESSAGES = (() => {
+  const now = new Date();
+  const ym = `${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getFullYear()).slice(2)}`;
+  const d = n => `${String(n).padStart(2, '0')}-${ym}`;
+  return [
+    `Dear Customer, Acct XX4417 is credited with Rs 92,000.00 on ${d(1)} from SALARY.`,
+    `Rs.24,000.00 debited from HDFC Bank A/C x4417 on ${d(2)}. Info: NEFT-RENT. Avl bal:INR 74,120.55`,
+    `Sent Rs.318.00 From HDFC Bank A/C x4417 To swiggy@ybl On ${d(3)} Ref 561203914477`,
+    `Sent Rs.1,240.00 From HDFC Bank A/C x4417 To blinkit@ybl On ${d(4)} Ref 561203914501`,
+    `INR 2,499.00 spent using Amazon Pay ICICI Bank Card XX8802 on ${d(5)} on AMAZON. Avl Lmt: INR 1,42,501`,
+    `Rs.649.00 debited from HDFC Bank A/C x4417 to NETFLIX on ${d(6)} Ref 561203915002`,
+    `Sent Rs.214.00 From HDFC Bank A/C x4417 To uber@axisbank On ${d(7)} Ref 561203915120`,
+    `Dear Customer, Rs.4000.00 withdrawn at SBI ATM S1AB4417 from A/c X4417 on ${d(8)} Txn# 884120. Avl Bal Rs 45231.10`,
+    `INR 1,180.00 spent using Amazon Pay ICICI Bank Card XX8802 on ${d(9)} on ZOMATO. Avl Lmt: INR 1,41,321`,
+    `Rs.15,000.00 debited from HDFC Bank A/C x4417 to ZERODHA on ${d(10)} Ref 561203915880`,
+    `Your AU Bank Credit Card xx6310 is used for INR 3,499.00 at DECATHLON on ${d(11)}. Avl Limit INR 96,501`,
+    `Sent Rs.899.00 From HDFC Bank A/C x4417 To airtel@hdfcbank On ${d(12)} Ref 561203916240`,
+    `123456 is your OTP for a transaction of Rs.2,499.00. Do not share this OTP with anyone.`,
+    `Rs.499.00 will be debited from your A/c XX4417 on ${d(25)} towards SPOTIFY autopay.`,
+  ];
+})();
+
+function loadSample() {
+  const led = buildLedger(SAMPLE_MESSAGES.map(m => parseMessage(m)), { rules: {} });
+  State.txns = led.txns;
+  State.review = led.review;
+  State.sample = true;
+  State.month = listMonths(State.txns)[0];
+}
+
+/* ------------------------------------------------------------------ boot */
+
+async function boot() {
+  const db = await useCapability('db');
+  State.store = makeStore(db);
+
+  let data = { months: {}, rules: {} };
+  try { data = await State.store.load(); } catch { toast('Could not load saved data.'); }
+
+  State.rules = data.rules || {};
+  const stored = Object.values(data.months || {}).flat();
+  if (stored.length) {
+    State.txns = stored.filter(t => (t.confidence ?? 1) >= 0.7);
+    State.review = stored.filter(t => (t.confidence ?? 1) < 0.7);
+    State.month = listMonths(State.txns)[0];
+  } else {
+    loadSample();
+  }
+  render();
+}
+
+el('btn-import').addEventListener('click', openDrawer);
+el('btn-close-drawer').addEventListener('click', closeDrawer);
+el('drawer').addEventListener('click', e => { if (e.target.id === 'drawer') closeDrawer(); });
+el('btn-parse').addEventListener('click', () => importText(el('paste-box').value, ''));
+el('btn-export').addEventListener('click', exportCsv);
+el('btn-clear').addEventListener('click', clearAll);
+el('month-select').addEventListener('change', e => { State.month = e.target.value; render(); });
+for (const t of ['month', 'trends']) {
+  el(`tab-${t}`).addEventListener('click', () => { State.tab = t; render(); });
+}
+el('file-input').addEventListener('change', async e => {
+  const f = e.target.files[0];
+  if (!f) return;
+  try {
+    if (/\.(xlsx?|csv)$/i.test(f.name)) {
+      const rows = await readSpreadsheet(f);
+      if (rows) {
+        const layout = detectLayout(rows);
+        if (layout.headerRow !== -1) { openStatementStep(rows, layout, f.name); e.target.value = ''; return; }
+      }
+      // A CSV with no statement header is probably an export of messages.
+    }
+    await importText(await f.text(), f.name);
+  } catch (err) {
+    toast('Could not read that file. CSV or Excel statements work best.');
+  }
+  e.target.value = '';
+});
+document.addEventListener('keydown', e => { if (e.key === 'Escape' && !el('drawer').hidden) closeDrawer(); });
+
+boot().catch(() => {
+  loadSample();
+  State.store = State.store || makeStore(null);
+  render();
+  toast('Started with sample data - saved data could not be loaded.');
+});
+
+</script>
