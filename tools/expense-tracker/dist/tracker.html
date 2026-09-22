@@ -629,7 +629,7 @@ const SEED_RULES = [
 
   ['Health',           ['apollo','pharmeasy','1mg','netmeds','medplus','practo','manipal','amaha','fortis','narayana','aster','meds','pharma','health','hospital','clinic','diagnost','thyrocare','dr lal','metropolis','lenskart','dental','medical','cult','gym','fitness']],
   ['Bills & Utilities',['jio','airtel','vodafone','vi ','bsnl','act fibernet','hathway','excitel','tata play','bescom','tneb','msedcl','adani electricity','tata power','torrent power','bses','indraprastha gas','mahanagar gas','hp gas','bharat gas','indane','electricity','broadband','postpaid','prepaid','recharge','googlecloud','google cloud','aws ','digitalocean','cred.telecom']],
-  ['Entertainment',    ['netflix','spotify','hotstar','jiocinema','jiohotstar','prime video','sonyliv','zee5','youtube','bookmyshow','pvr','inox','cinepolis','audible','kindle','playstation','steam','xbox','google pla','googleplay','play store','gaming']],
+  ['Entertainment',    ['astrotalk','netflix','spotify','hotstar','jiocinema','jiohotstar','prime video','sonyliv','zee5','youtube','bookmyshow','pvr','inox','cinepolis','audible','kindle','playstation','steam','xbox','google pla','googleplay','play store','gaming']],
   ['Education',        ['udemy','coursera','unacademy','byju','vedantu','upgrad','simplilearn','great learning','scaler','physics wallah','tuition','school fee','college','university','exam fee','skillshare','duolingo']],
   ['Shopping',         ['amazon','amzn','flipkart','myntra','ajio','nykaa','meesho','tatacliq','tata cliq','snapdeal','decathlon','ikea','lifestyle','shoppers stop','westside','zara','uniqlo','croma','reliance digital','vijay sales','pepperfry','urban ladder','firstcry','boat lifestyle']],
   ['Gifts',            ['gift','giftcard','gift card','ferns','igp.com','archies']],
@@ -752,9 +752,18 @@ const SEED_NEEDLES = SEED_RULES.flatMap(([, needles]) => needles);
  */
 function needleMatches(hay, needle) {
   const endBound = /\s$/.test(needle);
-  const core = needle.trim().replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const raw = needle.trim();
+  const core = raw.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
   if (!core) return false;
-  return new RegExp(`(^|[^a-z0-9])${core}${endBound ? '($|[^a-z0-9])' : ''}`, 'i').test(hay);
+
+  // Long needles are safe as plain substrings, and they have to be: UPI handles
+  // run words together, so "health" must still be found inside
+  // "shashilahealth". Short ones need a boundary or "vi" matches "via" and
+  // "aws" matches "laws".
+  const needsStartBound = raw.length < 5;
+  const start = needsStartBound ? '(^|[^a-z0-9])' : '';
+  const end = endBound ? '($|[^a-z0-9])' : '';
+  return new RegExp(`${start}${core}${end}`, 'i').test(hay);
 }
 
 

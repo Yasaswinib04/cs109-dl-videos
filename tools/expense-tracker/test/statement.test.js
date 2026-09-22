@@ -223,3 +223,16 @@ test('a genuinely missing row fails the net check', () => {
   assert.equal(c.netGap, -50, 'names how much movement no row explains');
   assert.equal(c.orderingOnly, false);
 });
+
+test('a long needle is found inside a run-together UPI handle', () => {
+  // UPI handles have no spaces, so "health" must be found in "shashilahealth".
+  assert.equal(categorize({ merchant: 'shashilahealth', direction: 'debit', raw: '' }).category, 'Health');
+  assert.equal(categorize({ merchant: 'zeptomarketpla', direction: 'debit', raw: '' }).category, 'Groceries');
+});
+
+test('short needles still require a word boundary', () => {
+  // The reason the boundary rule exists at all.
+  assert.notEqual(categorize({ merchant: 'Paid via card', direction: 'debit', raw: '' }).category, 'Bills & Utilities');
+  assert.notEqual(categorize({ merchant: 'lawsuit filing', direction: 'debit', raw: '' }).category, 'Bills & Utilities');
+  assert.notEqual(categorize({ merchant: 'current account', direction: 'debit', raw: '' }).category, 'Rent');
+});
