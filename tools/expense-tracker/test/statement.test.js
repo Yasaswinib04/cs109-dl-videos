@@ -236,3 +236,13 @@ test('short needles still require a word boundary', () => {
   assert.notEqual(categorize({ merchant: 'lawsuit filing', direction: 'debit', raw: '' }).category, 'Bills & Utilities');
   assert.notEqual(categorize({ merchant: 'current account', direction: 'debit', raw: '' }).category, 'Rent');
 });
+
+test('astrology apps resolve, but "astro" alone never matches a hospital', () => {
+  const cat = m => categorize({ merchant: m, direction: 'debit', raw: '' }).category;
+  assert.equal(cat('astrotalk1esbz'), 'Entertainment');
+  assert.equal(cat('anytimeastro.pay'), 'Entertainment');
+  assert.equal(cat('divineastro1234'), 'Entertainment');
+  // The reason there is no bare "astro" needle.
+  assert.equal(cat('gastroenterology clinic'), 'Health');
+  assert.equal(cat('Amaha Health'), 'Health');
+});
