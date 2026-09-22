@@ -8,7 +8,7 @@
  *      spend, on top of the card purchases you already counted    -> Transfers excluded.
  */
 
-import { categorize, normKey } from './categorize.js';
+import { categorize, canonicalMerchant, normKey } from './categorize.js';
 
 const REVIEW_THRESHOLD = 0.7;
 
@@ -125,7 +125,10 @@ export function buildLedger(parsed, opts = {}) {
   const noise = parsed.filter(p => p.kind === 'noise');
   const raw = parsed.filter(p => p.kind === 'txn');
 
-  const { txns: unique, duplicates } = dedupe(raw);
+  // Collapse brand spellings BEFORE dedupe, so the same payment described two
+  // ways by two sources still matches.
+  const named = raw.map(t => ({ ...t, merchant: canonicalMerchant(t.merchant, t.raw) }));
+  const { txns: unique, duplicates } = dedupe(named);
   const categorized = unique.map(t => {
     const { category, source } = categorize(t, rules);
     return { ...t, category, categorySource: source };

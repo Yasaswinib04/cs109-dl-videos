@@ -583,24 +583,25 @@ function splitMessages(blob) {
 const CATEGORIES = [
   'Food & Dining', 'Groceries', 'Transport', 'Shopping', 'Bills & Utilities',
   'Rent & Housing', 'Health', 'Entertainment', 'Travel', 'Education',
-  'Investments', 'Transfers', 'Cash', 'Fees & Charges', 'Income', 'Other',
+  'Investments', 'Transfers', 'Cash', 'Fees & Charges', 'Taxes', 'Income', 'Other',
 ];
 
 /** Substring -> category. Ordered: the first match wins, so keep specifics first. */
 const SEED_RULES = [
-  ['Food & Dining',    ['swiggy','zomato','eatfit','dominos','domino','pizza','mcdonald','kfc','burger','starbucks','chaayos','third wave','blue tokai','cafe','coffee','restaurant','biryani','bakery','dineout','eazydiner','faasos','behrouz','wow momo','haldiram','barbeque','subway','dunkin','baskin','chai point']],
-  ['Groceries',        ['blinkit','zepto','instamart','bigbasket','bbdaily','dmart','d-mart','licious','freshtohome','country delight','more retail','reliance fresh','spencer','nature basket','milkbasket','grofers','jiomart','ratnadeep']],
-  ['Transport',        ['uber','ola ','olacabs','rapido','namma yatri','yulu','bounce','blusmart','blu smart','metro','bmtc','dmrc','fastag','petrol','fuel','hpcl','iocl','bpcl','indian oil','shell','nayara','park+','parking']],
+  ['Groceries',        ['instamart','swiggy instamart','swiggystores','swiggy stores','blinkit','zepto','instamart','bigbasket','bbdaily','dmart','d-mart','licious','freshtohome','country delight','more retail','reliance fresh','spencer','nature basket','milkbasket','grofers','jiomart','ratnadeep']],
+  ['Food & Dining',    ['swiggy','sweet','bakers','biriyani','dhaba','hotel ','foods','tiffin','canteen','juice','icecream','ice cream','zomato','eatfit','dominos','domino','pizza','mcdonald','kfc','burger','starbucks','chaayos','third wave','blue tokai','cafe','coffee','restaurant','biryani','bakery','dineout','eazydiner','faasos','behrouz','wow momo','haldiram','barbeque','subway','dunkin','baskin','chai point']],
+  ['Transport',        ['uber','rapido','rapidi','namma','auto ','ola ','olacabs','rapido','namma yatri','yulu','bounce','blusmart','blu smart','metro','bmtc','dmrc','fastag','petrol','fuel','hpcl','iocl','bpcl','indian oil','shell','nayara','park+','parking']],
   ['Travel',           ['irctc','indigo','vistara','air india','akasa','spicejet','makemytrip','goibibo','yatra','cleartrip','ixigo','redbus','abhibus','oyo','airbnb','booking.com','agoda','trivago','easemytrip']],
   ['Shopping',         ['amazon','flipkart','myntra','ajio','nykaa','meesho','tatacliq','tata cliq','snapdeal','decathlon','ikea','lifestyle','shoppers stop','westside','zara','h&m','uniqlo','croma','reliance digital','vijay sales','pepperfry','urban ladder','boat','firstcry']],
-  ['Bills & Utilities',['jio','airtel','vodafone','vi ','bsnl','act fibernet','hathway','excitel','tata play','dish tv','bescom','tneb','msedcl','adani electricity','tata power','torrent power','mahadiscom','bses','indraprastha gas','mahanagar gas','gail','hp gas','bharat gas','indane','water bill','broadband','recharge','electricity','postpaid','prepaid']],
+  ['Bills & Utilities',['jio','googlecloud','google cloud','aws','digitalocean','airtel','vodafone','vi ','bsnl','act fibernet','hathway','excitel','tata play','dish tv','bescom','tneb','msedcl','adani electricity','tata power','torrent power','mahadiscom','bses','indraprastha gas','mahanagar gas','gail','hp gas','bharat gas','indane','water bill','broadband','recharge','electricity','postpaid','prepaid']],
   ['Rent & Housing',   ['rent','landlord','nobroker','housing.com','magicbricks','maintenance','society','apartment','flat rent','pg ','hostel']],
-  ['Health',           ['apollo','pharmeasy','1mg','tata 1mg','netmeds','medplus','practo','cult','cultfit','gym','fitness','hospital','clinic','diagnostic','thyrocare','dr lal','metropolis','lenskart','titan eye','dental','pharmacy','medical']],
-  ['Entertainment',    ['netflix','spotify','hotstar','jiocinema','jiohotstar','prime video','sonyliv','zee5','youtube','bookmyshow','pvr','inox','cinepolis','audible','kindle','playstation','steam','xbox','nintendo','dream11','gaming']],
+  ['Health',           ['meds','pharma','health','amaha','manipal','diagnost','apollo','pharmeasy','1mg','tata 1mg','netmeds','medplus','practo','cult','cultfit','gym','fitness','hospital','clinic','diagnostic','thyrocare','dr lal','metropolis','lenskart','titan eye','dental','pharmacy','medical']],
+  ['Entertainment',    ['netflix','google pla','googleplay','play store','spotify','hotstar','jiocinema','jiohotstar','prime video','sonyliv','zee5','youtube','bookmyshow','pvr','inox','cinepolis','audible','kindle','playstation','steam','xbox','nintendo','dream11','gaming']],
   ['Education',        ['udemy','coursera','unacademy','byju','vedantu','upgrad','simplilearn','great learning','scaler','newton','physics wallah','tuition','school fee','college','university','exam fee','skillshare','duolingo']],
-  ['Investments',      ['zerodha','groww','upstox','angel one','angelone','icici direct','hdfc securities','kuvera','coin','indmoney','smallcase','paytm money','mutual fund','sip ','nps ','ppf','elss','nippon','sbi mf','axis mf','hdfc mf','icici pru','mirae','parag parikh','quant mf','lic ','term plan','insurance','policybazaar','gold bond','sgb']],
-  ['Transfers',        ['cred','credit card payment','cc payment','card payment','billdesk','autopay','own account','self transfer','to self','credit card bill']],
+  ['Investments',      ['investment','zerodha','groww','upstox','angel one','angelone','icici direct','hdfc securities','kuvera','coin','indmoney','smallcase','paytm money','mutual fund','sip ','nps ','ppf','elss','nippon','sbi mf','axis mf','hdfc mf','icici pru','mirae','parag parikh','quant mf','lic ','term plan','insurance','policybazaar','gold bond','sgb']],
+  ['Transfers',        ['transfer to own account','self transfer','cred','credit card payment','cc payment','card payment','billdesk','autopay','own account','self transfer','to self','credit card bill']],
   ['Cash',             ['atm','cash withdrawal','cash wdl','withdrawn']],
+  ['Taxes',            ['directtax','direct tax','income tax','incometax','itns','advance tax','self assessment','tds ','gst pay','property tax']],
   ['Fees & Charges',   ['charges','gst','annual fee','late fee','penalty','interest','service charge','processing fee','convenience fee','surcharge','amc ','renewal fee']],
 ];
 
@@ -623,16 +624,77 @@ function categorize(txn, rules = {}) {
   // A correction the user made always wins over our guesses.
   if (key && rules[key]) return { category: rules[key], source: 'user' };
 
+  // Moving money between your own accounts is never spending or income.
+  if (txn.selfTransfer) return { category: 'Transfers', source: 'seed' };
+
   if (txn.direction === 'credit') {
-    if (/\b(refund|revers|cashback)\b/i.test(txn.raw || '')) return { category: 'Shopping', source: 'seed' };
-    if (INCOME_HINTS.some(h => hay.includes(h))) return { category: 'Income', source: 'seed' };
+    // A refund carries the category of the purchase it reverses - a Zepto
+    // refund is groceries, not shopping - so fall through to the merchant
+    // rules and only use a generic bucket when nothing matches.
+    if (/\b(refund|revers|cashback)\b/i.test(txn.raw || '')) {
+      for (const [category, needles] of SEED_RULES) {
+        if (needles.some(n => needleMatches(hay, n))) return { category, source: 'seed' };
+      }
+      return { category: 'Shopping', source: 'fallback' };
+    }
+    if (INCOME_HINTS.some(h => needleMatches(hay, h))) return { category: 'Income', source: 'seed' };
     return { category: 'Income', source: 'fallback' };
   }
 
   for (const [category, needles] of SEED_RULES) {
-    if (needles.some(n => hay.includes(n))) return { category, source: 'seed' };
+    if (needles.some(n => needleMatches(hay, n))) return { category, source: 'seed' };
   }
   return { category: 'Other', source: 'fallback' };
+}
+
+/**
+ * The same brand appears under many spellings in one statement - Zepto alone
+ * shows up as "ZEPTO MARK", "zeptomarketpla", "zeptonow.bdpg1", "zptmktp1" and
+ * "cf.zepto12". Collapsing them to one name is what makes a merchant total,
+ * a subscription, or a "you spent X on Y" figure mean anything.
+ *
+ * Order matters: the more specific brand is listed first.
+ */
+const BRANDS = [
+  ['Swiggy Instamart', ['instamart', 'swiggystores', 'swiggy stores']],
+  ['Swiggy',           ['swiggy']],
+  ['Zomato',           ['zomato']],
+  ['Zepto',            ['zepto', 'zptmktp']],
+  ['Blinkit',          ['blinkit', 'grofers']],
+  ['BigBasket',        ['bigbasket', 'bbdaily']],
+  ['CRED Telecom',     ['cred.telecom', 'cred telecom']],
+  ['CRED',             ['cred.club', 'cred club', 'dreamplug']],
+  ['Uber',             ['uber']],
+  ['Rapido',           ['rapido']],
+  ['Ola',              ['olacabs', 'ola ']],
+  ['Amazon',           ['amazon', 'amzn']],
+  ['Flipkart',         ['flipkart']],
+  ['Myntra',           ['myntra']],
+  ['Netflix',          ['netflix']],
+  ['Spotify',          ['spotify']],
+  ['Google Play',      ['google pla', 'googleplay']],
+  ['Google Cloud',     ['googlecloud', 'google cloud']],
+  ['Zerodha',          ['zerodha']],
+  ['Groww',            ['groww']],
+  ['Airtel',           ['airtel']],
+  ['Jio',              ['jio']],
+  ['redBus',           ['redbus']],
+  ['Meesho',           ['meesho']],
+  ['Income Tax',       ['directtax', 'direct tax', 'incometax']],
+];
+
+/**
+ * Canonical brand name for a merchant, or the original when no brand matches.
+ * @param {string} merchant  the name pulled from the narration
+ * @param {string} [raw]     the full narration, which often names the brand
+ *                           when the merchant field does not
+ */
+function canonicalMerchant(merchant, raw = '') {
+  const hay = `${normKey(merchant)} ${String(raw).toLowerCase()}`;
+  for (const [name, needles] of BRANDS) {
+    if (needles.some(n => needleMatches(hay, n))) return name;
+  }
+  return merchant;
 }
 
 /** Record a correction so the same merchant is never miscategorized twice. */
@@ -642,9 +704,26 @@ function learnRule(rules, merchant, category) {
   return { ...rules, [key]: category };
 }
 
-/** Flat list of every seed needle - used to recognise a merchant inside a
- *  statement narration, where the counterparty is one segment among many. */
-const SEED_NEEDLES = SEED_RULES.flatMap(([, needles]) => needles).map(n => n.trim());
+/** Flat list of every seed needle, AS AUTHORED - used to recognise a merchant
+ *  inside a statement narration. Never trim these: a trailing space is
+ *  meaningful (see needleMatches). */
+const SEED_NEEDLES = SEED_RULES.flatMap(([, needles]) => needles);
+
+/**
+ * Match a needle against text with word boundaries.
+ *
+ * Plain substring matching is not safe at these lengths: "vi" (the telecom
+ * operator) otherwise matches "paid via card", and "aws" matches "laws". So a
+ * needle must start at a word boundary, and a needle authored WITH A TRAILING
+ * SPACE ("vi ", "sip ", "auto ") must end at one too - that trailing space is
+ * how the rule table says "this is a whole word".
+ */
+function needleMatches(hay, needle) {
+  const endBound = /\s$/.test(needle);
+  const core = needle.trim().replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  if (!core) return false;
+  return new RegExp(`(^|[^a-z0-9])${core}${endBound ? '($|[^a-z0-9])' : ''}`, 'i').test(hay);
+}
 
 
 
@@ -836,10 +915,15 @@ function parseNarration(text, knownMerchants = []) {
   const refMatch = /\b(\d{9,18})\b/.exec(raw);
   if (refMatch) out.ref = refMatch[1];
 
+  // The positional parse must come first: a bare VPA match would read
+  // "7306372789@pty" as the merchant and throw away the "uber" beside it.
+  const segments = raw.split(/[\/|]+/).map(s => s.trim());
+  const upi = parseUpiSegments(segments, knownMerchants);
+  if (upi) return { ...out, ...upi };
+
   const vpa = /\b([a-zA-Z0-9][a-zA-Z0-9._-]{1,})@([a-z]{2,})\b/.exec(raw);
   if (vpa) { out.vpa = `${vpa[1]}@${vpa[2]}`; out.merchant = cleanName(vpa[1]); return out; }
 
-  const segments = raw.split(/[\/|]+/).map(s => s.trim()).filter(Boolean);
   const candidates = [];
   for (const seg of segments) {
     const words = seg.split(/\s+/).filter(w => !NARRATION_NOISE.has(w.toLowerCase()));
@@ -852,7 +936,7 @@ function parseNarration(text, knownMerchants = []) {
     if (NARRATION_NOISE.has(cleaned.toLowerCase())) continue;
 
     const key = normKey(cleaned);
-    const known = knownMerchants.some(n => key.includes(n));
+    const known = knownMerchants.some(n => needleMatches(key, n));
     candidates.push({ text: cleaned, known, digits: (cleaned.match(/\d/g) || []).length });
   }
   if (!candidates.length) return out;
@@ -863,6 +947,58 @@ function parseNarration(text, knownMerchants = []) {
     (b.known - a.known) || (a.digits - b.digits) || (b.text.length - a.text.length));
   out.merchant = cleanName(candidates[0].text);
   return out;
+}
+
+/** Notes a payer never chose - the rail's own wording, not a counterparty. */
+const GENERIC_NOTE = /^(upi|payment|pay|paid|sent|na|no remarks?|collect|scan|mandate|amazon pay|trf|transfer|money|fund|gpay|phonepe|bhim|neft|imps|other|misc)\b/i;
+
+const numericish = s => {
+  const t = String(s).replace(/\s/g, '');
+  return !t || (t.replace(/\D/g, '').length / t.length) > 0.6;
+};
+
+/**
+ * ICICI writes every UPI line to a fixed shape:
+ *
+ *   UPI / payee / vpa / note / payee's bank / RRN / internal ref /
+ *
+ * Two things make position essential here. The fifth field is the COUNTERPARTY'S
+ * BANK - read it as a merchant and a third of the ledger becomes "YES BANK L".
+ * And every field is truncated (payee and note to 10 characters, vpa to 14), so
+ * no field is reliably the best name: the note carries it for aggregators
+ * ("uber", "rapido"), the vpa for businesses ("zeptomarketpla"), the payee for
+ * person-to-person and for newer statements that mask the vpa ("XXyupi@axb").
+ * So we check all three against known merchants first, then fall back by how
+ * informative each field usually is.
+ */
+function parseUpiSegments(segments, knownMerchants) {
+  if (!/^upi$/i.test((segments[0] || '').trim()) || segments.length < 6) return null;
+
+  const payee = (segments[1] || '').trim();
+  const vpaRaw = (segments[2] || '').trim();
+  const vpaLocal = vpaRaw.split('@')[0].replace(/^XX/, '').trim();
+  const note = (segments[3] || '').trim();
+  const rrn = (segments[5] || '').trim();
+
+  const isKnown = c => c && knownMerchants.some(n => needleMatches(normKey(c), n));
+  let pick = [note, vpaLocal, payee].find(isKnown);
+
+  if (!pick) {
+    const usable = [
+      vpaLocal.length >= 5 && !numericish(vpaLocal) && !GENERIC_NOTE.test(vpaLocal) ? vpaLocal : null,
+      !numericish(payee) ? payee : null,
+      !GENERIC_NOTE.test(note) && !numericish(note) ? note : null,
+    ];
+    pick = usable.find(Boolean);
+  }
+
+  return {
+    merchant: pick ? cleanName(pick) : null,
+    channel: 'upi',
+    ref: /^\d{9,18}$/.test(rrn) ? rrn : null,
+    vpa: vpaRaw.includes('@') ? vpaRaw : null,
+    payee: payee || null,
+  };
 }
 
 function cleanName(s) {
@@ -917,6 +1053,7 @@ function rowsToTransactions(rows, layout, opts = {}) {
 
     const narration = map.narration !== undefined ? String(row[map.narration] || '') : '';
     const parsed = parseNarration(narration, known);
+    const toSelf = isSelf(parsed.payee, opts.accountHolder) || isSelf(parsed.merchant, opts.accountHolder);
     const balance = map.balance !== undefined ? cellToAmount(row[map.balance]) : null;
 
     txns.push({
@@ -925,7 +1062,8 @@ function rowsToTransactions(rows, layout, opts = {}) {
       date,
       amount,
       direction,
-      merchant: parsed.merchant || (parsed.channel === 'atm' ? 'Cash withdrawal' : null),
+      merchant: toSelf ? 'Transfer to own account' : (parsed.merchant || (parsed.channel === 'atm' ? 'Cash withdrawal' : null)),
+      selfTransfer: toSelf,
       channel: parsed.channel,
       ref: (map.ref !== undefined && String(row[map.ref] || '').trim()) || parsed.ref || null,
       balance,
@@ -939,37 +1077,80 @@ function rowsToTransactions(rows, layout, opts = {}) {
   return { txns, skipped };
 }
 
+/**
+ * Statements truncate the payee name, so a transfer to yourself shows up as a
+ * prefix of your own name. Matching it matters: these are often the largest
+ * lines on the statement, and counting them as spending would be wrong.
+ */
+function isSelf(name, holder) {
+  const a = normKey(name), b = normKey(holder);
+  if (!a || !b || a.length < 6) return false;
+  return b.startsWith(a) || a.startsWith(b);
+}
+
 /* ------------------------------------------------------------------ proof */
 
 /**
- * A statement's running balance makes the import verifiable: for every
- * consecutive pair, previous balance minus debit plus credit must equal the next
- * balance. If that holds throughout, no row was dropped, duplicated or
- * misparsed - a guarantee no message-based import can offer. Where it breaks, we
- * name the row so it can be fixed rather than silently trusted.
+ * A statement's running balance makes an import verifiable rather than merely
+ * plausible. Two different questions get asked of it, because real statements
+ * fail them differently:
+ *
+ *   1. NET — does the opening balance, plus every credit, minus every debit,
+ *      land exactly on the closing balance? This is order-independent, so it is
+ *      the real test of completeness: it only fails if a row is missing,
+ *      duplicated or misread.
+ *
+ *   2. PER ROW — does each row follow from the one above it? Useful for
+ *      locating a problem, but banks list same-day transactions in an order
+ *      that does not always match the balance sequence, so a failure here with
+ *      a clean net result means the rows are merely out of order, which is
+ *      normal and harmless.
+ *
+ * Reporting these separately is the difference between "your export dropped
+ * something" and "your bank sorted two rows differently".
  */
 function checkBalanceContinuity(txns) {
   const withBal = txns.filter(t => typeof t.balance === 'number' && Number.isFinite(t.balance));
-  if (withBal.length < 2) return { checked: 0, ok: true, breaks: [], available: false };
+  if (withBal.length < 2) {
+    return { available: false, ok: true, checked: 0, breaks: [], netOk: true, netGap: 0 };
+  }
+
+  const delta = t => (t.direction === 'credit' ? t.amount : -t.amount);
+  const opening = withBal[0].balance - delta(withBal[0]);
+  const closing = withBal[withBal.length - 1].balance;
+  const expected = opening + withBal.reduce((a, t) => a + delta(t), 0);
+  const netGap = Math.round((closing - expected) * 100) / 100;
+  const netOk = Math.abs(netGap) < 0.05;
 
   const breaks = [];
   for (let i = 1; i < withBal.length; i++) {
     const prev = withBal[i - 1], cur = withBal[i];
-    const delta = cur.direction === 'credit' ? cur.amount : -cur.amount;
-    const expected = prev.balance + delta;
-    if (Math.abs(expected - cur.balance) > 0.05) {
+    const step = prev.balance + delta(cur);
+    if (Math.abs(step - cur.balance) > 0.05) {
       breaks.push({
         index: i,
         date: cur.date,
         merchant: cur.merchant,
         amount: cur.amount,
-        expected: Math.round(expected * 100) / 100,
+        expected: Math.round(step * 100) / 100,
         actual: cur.balance,
-        gap: Math.round((cur.balance - expected) * 100) / 100,
+        gap: Math.round((cur.balance - step) * 100) / 100,
       });
     }
   }
-  return { checked: withBal.length, ok: breaks.length === 0, breaks, available: true };
+
+  return {
+    available: true,
+    checked: withBal.length,
+    opening: Math.round(opening * 100) / 100,
+    closing: Math.round(closing * 100) / 100,
+    netOk,
+    netGap,
+    breaks,
+    // Rows out of sequence that still add up in total: normal, not an error.
+    orderingOnly: netOk && breaks.length > 0,
+    ok: netOk && breaks.length === 0,
+  };
 }
 
 
@@ -1100,7 +1281,10 @@ function buildLedger(parsed, opts = {}) {
   const noise = parsed.filter(p => p.kind === 'noise');
   const raw = parsed.filter(p => p.kind === 'txn');
 
-  const { txns: unique, duplicates } = dedupe(raw);
+  // Collapse brand spellings BEFORE dedupe, so the same payment described two
+  // ways by two sources still matches.
+  const named = raw.map(t => ({ ...t, merchant: canonicalMerchant(t.merchant, t.raw) }));
+  const { txns: unique, duplicates } = dedupe(named);
   const categorized = unique.map(t => {
     const { category, source } = categorize(t, rules);
     return { ...t, category, categorySource: source };
@@ -1381,9 +1565,19 @@ function guessAccountMeta(rows, headerRow, filename) {
   // field is right there to type into.
   const preamble = rows.slice(0, Math.max(headerRow, 0)).flat().join(' ');
   const iss = detectIssuer(preamble, '') || detectIssuer(filename || '', '');
-  const m = /(?:account|a\/c|card)\s*(?:number|no\.?)?\s*[:\-]?\s*([\dxX*]{6,20})/i.exec(preamble);
+  const m = /(?:account|a\/c|card)\s*(?:number|no\.?)?\s*[:\-]?\s*([\dxX*]{6,20})/i.exec(preamble)
+    || /-\s*(\d{8,20})\s*(?:,|$)/.exec(preamble);
   const digits = m ? m[1].replace(/\D/g, '') : '';
-  return { issuer: iss ? iss.name : '', account: digits.slice(-4) || '' };
+
+  // The holder's name is what lets us spot transfers you made to yourself -
+  // often the largest lines on a statement, and not spending.
+  const nameMatch = /account name\s*[:\-]\s*([A-Za-z][A-Za-z .]{3,45}?)\s*(?:,|$)/i.exec(preamble)
+    || /list\s*-\s*([A-Za-z][A-Za-z .]{3,45}?)\s*-\s*\d{6,}/i.exec(preamble);
+  return {
+    issuer: iss ? iss.name : '',
+    account: digits.slice(-4) || '',
+    holder: nameMatch ? nameMatch[1].trim() : '',
+  };
 }
 
 async function readSpreadsheet(file) {
@@ -1406,7 +1600,7 @@ function openStatementStep(rows, layout, filename) {
 }
 
 function renderStatementStep() {
-  const { rows, layout, filename, issuer, account } = State.pending;
+  const { rows, layout, filename, issuer, account, holder } = State.pending;
   const header = layout.header || [];
   const colOptions = role => [`<option value="">— none —</option>`]
     .concat(header.map((h, i) =>
@@ -1414,7 +1608,7 @@ function renderStatementStep() {
     .join('');
 
   const { txns } = rowsToTransactions(rows, layout, {
-    knownMerchants: SEED_NEEDLES, issuer, account: account || null,
+    knownMerchants: SEED_NEEDLES, issuer, account: account || null, accountHolder: holder,
   });
   const check = checkBalanceContinuity(txns);
 
@@ -1426,6 +1620,7 @@ function renderStatementStep() {
     <div class="acct-row">
       <label>Bank or card<input id="st-issuer" type="text" value="${esc(issuer)}" placeholder="ICICI Bank"></label>
       <label>Last 4 digits<input id="st-account" type="text" maxlength="4" value="${esc(account)}" placeholder="7890"></label>
+      <label>Account holder<input id="st-holder" type="text" value="${esc(holder || '')}" placeholder="Your name, to spot self-transfers"></label>
     </div>
 
     <div class="map-grid">
@@ -1460,10 +1655,11 @@ function renderStatementStep() {
       renderStatementStep();
     });
   }
-  for (const id of ['st-issuer', 'st-account']) {
-    el(id).addEventListener('input', e => {
-      State.pending[id === 'st-issuer' ? 'issuer' : 'account'] = e.target.value.trim();
-    });
+  const FIELD = { 'st-issuer': 'issuer', 'st-account': 'account', 'st-holder': 'holder' };
+  for (const id of Object.keys(FIELD)) {
+    el(id).addEventListener('input', e => { State.pending[FIELD[id]] = e.target.value.trim(); });
+    // The holder name changes self-transfer detection, so re-read the sheet.
+    if (id === 'st-holder') el(id).addEventListener('change', renderStatementStep);
   }
   el('btn-commit-statement').addEventListener('click', commitStatement);
   el('btn-back-to-paste').addEventListener('click', () => {
@@ -1483,22 +1679,32 @@ function balanceCheckHtml(check, total) {
       The amounts will import as they are, but nothing can confirm the file is complete.
       Re-download with the balance column if your bank offers it.</div>`;
   }
-  if (check.ok) {
+
+  // Rows listed out of sequence still add up in total. Banks do this with
+  // same-day transactions; it is not an error and not worth alarming anyone over.
+  const ordering = check.breaks.length
+    ? `<p class="note" style="margin-top:8px">${check.breaks.length} row${check.breaks.length === 1 ? ' is' : 's are'} listed out of order within their day. Normal for bank exports \u2014 they still reconcile.</p>`
+    : '';
+
+  if (check.netOk) {
     return `<div class="check check-ok"><strong>All ${check.checked} rows add up</strong>
-      Every row matches the statement's own running balance, so nothing is missing,
-      duplicated or misread.</div>`;
+      Opening ${INR(check.opening)} plus every deposit, minus every withdrawal, lands exactly on
+      the closing balance of ${INR(check.closing)}. Nothing is missing, duplicated or misread.${ordering}</div>`;
   }
-  return `<div class="check check-bad"><strong>${check.breaks.length} row${check.breaks.length === 1 ? '' : 's'} do not add up</strong>
-    ${check.checked} rows were checked against the running balance. These do not reconcile —
-    usually a column mapped to the wrong role, or a statement that starts mid-day:
+
+  const missing = check.netGap < 0 ? 'left the account' : 'arrived';
+  return `<div class="check check-bad"><strong>${INR(Math.abs(check.netGap), 2)} ${missing} without a row to explain it</strong>
+    Across ${check.checked} rows, the balance moves ${INR(Math.abs(check.netGap), 2)} more than the
+    transactions account for. Usually a column mapped to the wrong role, or a few rows the export
+    left out. The totals will be off by that much:
     <ul>${check.breaks.slice(0, 5).map(b =>
-      `<li>${esc(b.date)} ${esc(b.merchant || '')} — off by ${INR(b.gap, 2)}</li>`).join('')}</ul></div>`;
+      `<li>${esc(b.date)} ${esc((b.merchant || '').slice(0, 24))} \u2014 off by ${INR(b.gap, 2)}</li>`).join('')}</ul></div>`;
 }
 
 async function commitStatement() {
-  const { rows, layout, issuer, account } = State.pending;
+  const { rows, layout, issuer, account, holder } = State.pending;
   const { txns } = rowsToTransactions(rows, layout, {
-    knownMerchants: SEED_NEEDLES, issuer: issuer || null, account: account || null,
+    knownMerchants: SEED_NEEDLES, issuer: issuer || null, account: account || null, accountHolder: holder,
   });
   if (!txns.length) { toast('Nothing to import.'); return; }
 

@@ -171,9 +171,19 @@ function guessAccountMeta(rows, headerRow, filename) {
   // field is right there to type into.
   const preamble = rows.slice(0, Math.max(headerRow, 0)).flat().join(' ');
   const iss = detectIssuer(preamble, '') || detectIssuer(filename || '', '');
-  const m = /(?:account|a\/c|card)\s*(?:number|no\.?)?\s*[:\-]?\s*([\dxX*]{6,20})/i.exec(preamble);
+  const m = /(?:account|a\/c|card)\s*(?:number|no\.?)?\s*[:\-]?\s*([\dxX*]{6,20})/i.exec(preamble)
+    || /-\s*(\d{8,20})\s*(?:,|$)/.exec(preamble);
   const digits = m ? m[1].replace(/\D/g, '') : '';
-  return { issuer: iss ? iss.name : '', account: digits.slice(-4) || '' };
+
+  // The holder's name is what lets us spot transfers you made to yourself -
+  // often the largest lines on a statement, and not spending.
+  const nameMatch = /account name\s*[:\-]\s*([A-Za-z][A-Za-z .]{3,45}?)\s*(?:,|$)/i.exec(preamble)
+    || /list\s*-\s*([A-Za-z][A-Za-z .]{3,45}?)\s*-\s*\d{6,}/i.exec(preamble);
+  return {
+    issuer: iss ? iss.name : '',
+    account: digits.slice(-4) || '',
+    holder: nameMatch ? nameMatch[1].trim() : '',
+  };
 }
 
 async function readSpreadsheet(file) {
@@ -196,7 +206,7 @@ function openStatementStep(rows, layout, filename) {
 }
 
 function renderStatementStep() {
-  const { rows, layout, filename, issuer, account } = State.pending;
+  const { rows, layout, filename, issuer, account, holder } = State.pending;
   const header = layout.header || [];
   const colOptions = role => [`<option value="">— none —</option>`]
     .concat(header.map((h, i) =>
@@ -204,7 +214,7 @@ function renderStatementStep() {
     .join('');
 
   const { txns } = rowsToTransactions(rows, layout, {
-    knownMerchants: SEED_NEEDLES, issuer, account: account || null,
+    knownMerchants: SEED_NEEDLES, issuer, account: account || null, accountHolder: holder,
   });
   const check = checkBalanceContinuity(txns);
 
@@ -216,6 +226,7 @@ function renderStatementStep() {
     <div class="acct-row">
       <label>Bank or card<input id="st-issuer" type="text" value="${esc(issuer)}" placeholder="ICICI Bank"></label>
       <label>Last 4 digits<input id="st-account" type="text" maxlength="4" value="${esc(account)}" placeholder="7890"></label>
+      <label>Account holder<input id="st-holder" type="text" value="${esc(holder || '')}" placeholder="Your name, to spot self-transfers"></label>
     </div>
 
     <div class="map-grid">
@@ -250,10 +261,11 @@ function renderStatementStep() {
       renderStatementStep();
     });
   }
-  for (const id of ['st-issuer', 'st-account']) {
-    el(id).addEventListener('input', e => {
-      State.pending[id === 'st-issuer' ? 'issuer' : 'account'] = e.target.value.trim();
-    });
+  const FIELD = { 'st-issuer': 'issuer', 'st-account': 'account', 'st-holder': 'holder' };
+  for (const id of Object.keys(FIELD)) {
+    el(id).addEventListener('input', e => { State.pending[FIELD[id]] = e.target.value.trim(); });
+    // The holder name changes self-transfer detection, so re-read the sheet.
+    if (id === 'st-holder') el(id).addEventListener('change', renderStatementStep);
   }
   el('btn-commit-statement').addEventListener('click', commitStatement);
   el('btn-back-to-paste').addEventListener('click', () => {
@@ -273,22 +285,32 @@ function balanceCheckHtml(check, total) {
       The amounts will import as they are, but nothing can confirm the file is complete.
       Re-download with the balance column if your bank offers it.</div>`;
   }
-  if (check.ok) {
+
+  // Rows listed out of sequence still add up in total. Banks do this with
+  // same-day transactions; it is not an error and not worth alarming anyone over.
+  const ordering = check.breaks.length
+    ? `<p class="note" style="margin-top:8px">${check.breaks.length} row${check.breaks.length === 1 ? ' is' : 's are'} listed out of order within their day. Normal for bank exports \u2014 they still reconcile.</p>`
+    : '';
+
+  if (check.netOk) {
     return `<div class="check check-ok"><strong>All ${check.checked} rows add up</strong>
-      Every row matches the statement's own running balance, so nothing is missing,
-      duplicated or misread.</div>`;
+      Opening ${INR(check.opening)} plus every deposit, minus every withdrawal, lands exactly on
+      the closing balance of ${INR(check.closing)}. Nothing is missing, duplicated or misread.${ordering}</div>`;
   }
-  return `<div class="check check-bad"><strong>${check.breaks.length} row${check.breaks.length === 1 ? '' : 's'} do not add up</strong>
-    ${check.checked} rows were checked against the running balance. These do not reconcile —
-    usually a column mapped to the wrong role, or a statement that starts mid-day:
+
+  const missing = check.netGap < 0 ? 'left the account' : 'arrived';
+  return `<div class="check check-bad"><strong>${INR(Math.abs(check.netGap), 2)} ${missing} without a row to explain it</strong>
+    Across ${check.checked} rows, the balance moves ${INR(Math.abs(check.netGap), 2)} more than the
+    transactions account for. Usually a column mapped to the wrong role, or a few rows the export
+    left out. The totals will be off by that much:
     <ul>${check.breaks.slice(0, 5).map(b =>
-      `<li>${esc(b.date)} ${esc(b.merchant || '')} — off by ${INR(b.gap, 2)}</li>`).join('')}</ul></div>`;
+      `<li>${esc(b.date)} ${esc((b.merchant || '').slice(0, 24))} \u2014 off by ${INR(b.gap, 2)}</li>`).join('')}</ul></div>`;
 }
 
 async function commitStatement() {
-  const { rows, layout, issuer, account } = State.pending;
+  const { rows, layout, issuer, account, holder } = State.pending;
   const { txns } = rowsToTransactions(rows, layout, {
-    knownMerchants: SEED_NEEDLES, issuer: issuer || null, account: account || null,
+    knownMerchants: SEED_NEEDLES, issuer: issuer || null, account: account || null, accountHolder: holder,
   });
   if (!txns.length) { toast('Nothing to import.'); return; }
 

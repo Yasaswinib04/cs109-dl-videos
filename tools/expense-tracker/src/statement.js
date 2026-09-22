@@ -14,7 +14,7 @@
  */
 
 import { extractDate } from './parse.js';
-import { normKey } from './categorize.js';
+import { normKey, needleMatches } from './categorize.js';
 
 /* ------------------------------------------------------------------ csv */
 
@@ -187,10 +187,15 @@ export function parseNarration(text, knownMerchants = []) {
   const refMatch = /\b(\d{9,18})\b/.exec(raw);
   if (refMatch) out.ref = refMatch[1];
 
+  // The positional parse must come first: a bare VPA match would read
+  // "7306372789@pty" as the merchant and throw away the "uber" beside it.
+  const segments = raw.split(/[\/|]+/).map(s => s.trim());
+  const upi = parseUpiSegments(segments, knownMerchants);
+  if (upi) return { ...out, ...upi };
+
   const vpa = /\b([a-zA-Z0-9][a-zA-Z0-9._-]{1,})@([a-z]{2,})\b/.exec(raw);
   if (vpa) { out.vpa = `${vpa[1]}@${vpa[2]}`; out.merchant = cleanName(vpa[1]); return out; }
 
-  const segments = raw.split(/[\/|]+/).map(s => s.trim()).filter(Boolean);
   const candidates = [];
   for (const seg of segments) {
     const words = seg.split(/\s+/).filter(w => !NARRATION_NOISE.has(w.toLowerCase()));
@@ -203,7 +208,7 @@ export function parseNarration(text, knownMerchants = []) {
     if (NARRATION_NOISE.has(cleaned.toLowerCase())) continue;
 
     const key = normKey(cleaned);
-    const known = knownMerchants.some(n => key.includes(n));
+    const known = knownMerchants.some(n => needleMatches(key, n));
     candidates.push({ text: cleaned, known, digits: (cleaned.match(/\d/g) || []).length });
   }
   if (!candidates.length) return out;
@@ -214,6 +219,58 @@ export function parseNarration(text, knownMerchants = []) {
     (b.known - a.known) || (a.digits - b.digits) || (b.text.length - a.text.length));
   out.merchant = cleanName(candidates[0].text);
   return out;
+}
+
+/** Notes a payer never chose - the rail's own wording, not a counterparty. */
+const GENERIC_NOTE = /^(upi|payment|pay|paid|sent|na|no remarks?|collect|scan|mandate|amazon pay|trf|transfer|money|fund|gpay|phonepe|bhim|neft|imps|other|misc)\b/i;
+
+const numericish = s => {
+  const t = String(s).replace(/\s/g, '');
+  return !t || (t.replace(/\D/g, '').length / t.length) > 0.6;
+};
+
+/**
+ * ICICI writes every UPI line to a fixed shape:
+ *
+ *   UPI / payee / vpa / note / payee's bank / RRN / internal ref /
+ *
+ * Two things make position essential here. The fifth field is the COUNTERPARTY'S
+ * BANK - read it as a merchant and a third of the ledger becomes "YES BANK L".
+ * And every field is truncated (payee and note to 10 characters, vpa to 14), so
+ * no field is reliably the best name: the note carries it for aggregators
+ * ("uber", "rapido"), the vpa for businesses ("zeptomarketpla"), the payee for
+ * person-to-person and for newer statements that mask the vpa ("XXyupi@axb").
+ * So we check all three against known merchants first, then fall back by how
+ * informative each field usually is.
+ */
+function parseUpiSegments(segments, knownMerchants) {
+  if (!/^upi$/i.test((segments[0] || '').trim()) || segments.length < 6) return null;
+
+  const payee = (segments[1] || '').trim();
+  const vpaRaw = (segments[2] || '').trim();
+  const vpaLocal = vpaRaw.split('@')[0].replace(/^XX/, '').trim();
+  const note = (segments[3] || '').trim();
+  const rrn = (segments[5] || '').trim();
+
+  const isKnown = c => c && knownMerchants.some(n => needleMatches(normKey(c), n));
+  let pick = [note, vpaLocal, payee].find(isKnown);
+
+  if (!pick) {
+    const usable = [
+      vpaLocal.length >= 5 && !numericish(vpaLocal) && !GENERIC_NOTE.test(vpaLocal) ? vpaLocal : null,
+      !numericish(payee) ? payee : null,
+      !GENERIC_NOTE.test(note) && !numericish(note) ? note : null,
+    ];
+    pick = usable.find(Boolean);
+  }
+
+  return {
+    merchant: pick ? cleanName(pick) : null,
+    channel: 'upi',
+    ref: /^\d{9,18}$/.test(rrn) ? rrn : null,
+    vpa: vpaRaw.includes('@') ? vpaRaw : null,
+    payee: payee || null,
+  };
 }
 
 function cleanName(s) {
@@ -268,6 +325,7 @@ export function rowsToTransactions(rows, layout, opts = {}) {
 
     const narration = map.narration !== undefined ? String(row[map.narration] || '') : '';
     const parsed = parseNarration(narration, known);
+    const toSelf = isSelf(parsed.payee, opts.accountHolder) || isSelf(parsed.merchant, opts.accountHolder);
     const balance = map.balance !== undefined ? cellToAmount(row[map.balance]) : null;
 
     txns.push({
@@ -276,7 +334,8 @@ export function rowsToTransactions(rows, layout, opts = {}) {
       date,
       amount,
       direction,
-      merchant: parsed.merchant || (parsed.channel === 'atm' ? 'Cash withdrawal' : null),
+      merchant: toSelf ? 'Transfer to own account' : (parsed.merchant || (parsed.channel === 'atm' ? 'Cash withdrawal' : null)),
+      selfTransfer: toSelf,
       channel: parsed.channel,
       ref: (map.ref !== undefined && String(row[map.ref] || '').trim()) || parsed.ref || null,
       balance,
@@ -290,35 +349,78 @@ export function rowsToTransactions(rows, layout, opts = {}) {
   return { txns, skipped };
 }
 
+/**
+ * Statements truncate the payee name, so a transfer to yourself shows up as a
+ * prefix of your own name. Matching it matters: these are often the largest
+ * lines on the statement, and counting them as spending would be wrong.
+ */
+function isSelf(name, holder) {
+  const a = normKey(name), b = normKey(holder);
+  if (!a || !b || a.length < 6) return false;
+  return b.startsWith(a) || a.startsWith(b);
+}
+
 /* ------------------------------------------------------------------ proof */
 
 /**
- * A statement's running balance makes the import verifiable: for every
- * consecutive pair, previous balance minus debit plus credit must equal the next
- * balance. If that holds throughout, no row was dropped, duplicated or
- * misparsed - a guarantee no message-based import can offer. Where it breaks, we
- * name the row so it can be fixed rather than silently trusted.
+ * A statement's running balance makes an import verifiable rather than merely
+ * plausible. Two different questions get asked of it, because real statements
+ * fail them differently:
+ *
+ *   1. NET — does the opening balance, plus every credit, minus every debit,
+ *      land exactly on the closing balance? This is order-independent, so it is
+ *      the real test of completeness: it only fails if a row is missing,
+ *      duplicated or misread.
+ *
+ *   2. PER ROW — does each row follow from the one above it? Useful for
+ *      locating a problem, but banks list same-day transactions in an order
+ *      that does not always match the balance sequence, so a failure here with
+ *      a clean net result means the rows are merely out of order, which is
+ *      normal and harmless.
+ *
+ * Reporting these separately is the difference between "your export dropped
+ * something" and "your bank sorted two rows differently".
  */
 export function checkBalanceContinuity(txns) {
   const withBal = txns.filter(t => typeof t.balance === 'number' && Number.isFinite(t.balance));
-  if (withBal.length < 2) return { checked: 0, ok: true, breaks: [], available: false };
+  if (withBal.length < 2) {
+    return { available: false, ok: true, checked: 0, breaks: [], netOk: true, netGap: 0 };
+  }
+
+  const delta = t => (t.direction === 'credit' ? t.amount : -t.amount);
+  const opening = withBal[0].balance - delta(withBal[0]);
+  const closing = withBal[withBal.length - 1].balance;
+  const expected = opening + withBal.reduce((a, t) => a + delta(t), 0);
+  const netGap = Math.round((closing - expected) * 100) / 100;
+  const netOk = Math.abs(netGap) < 0.05;
 
   const breaks = [];
   for (let i = 1; i < withBal.length; i++) {
     const prev = withBal[i - 1], cur = withBal[i];
-    const delta = cur.direction === 'credit' ? cur.amount : -cur.amount;
-    const expected = prev.balance + delta;
-    if (Math.abs(expected - cur.balance) > 0.05) {
+    const step = prev.balance + delta(cur);
+    if (Math.abs(step - cur.balance) > 0.05) {
       breaks.push({
         index: i,
         date: cur.date,
         merchant: cur.merchant,
         amount: cur.amount,
-        expected: Math.round(expected * 100) / 100,
+        expected: Math.round(step * 100) / 100,
         actual: cur.balance,
-        gap: Math.round((cur.balance - expected) * 100) / 100,
+        gap: Math.round((cur.balance - step) * 100) / 100,
       });
     }
   }
-  return { checked: withBal.length, ok: breaks.length === 0, breaks, available: true };
+
+  return {
+    available: true,
+    checked: withBal.length,
+    opening: Math.round(opening * 100) / 100,
+    closing: Math.round(closing * 100) / 100,
+    netOk,
+    netGap,
+    breaks,
+    // Rows out of sequence that still add up in total: normal, not an error.
+    orderingOnly: netOk && breaks.length > 0,
+    ok: netOk && breaks.length === 0,
+  };
 }

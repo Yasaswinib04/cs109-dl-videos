@@ -175,3 +175,51 @@ test('an unrecognisable sheet reports itself as not confident', () => {
   const rows = parseCsv('foo,bar,baz\n1,2,3');
   assert.equal(detectLayout(rows).confident, false);
 });
+
+test('a short needle does not match inside an unrelated word', () => {
+  // "vi" is the telecom operator; it must not match "paid via card".
+  const r = parseNarration('UPI/Plazza/plazza171910.r/Paid via C/AXIS BANK/649121142143/crd7b1/', SEED_NEEDLES);
+  assert.equal(r.merchant, 'plazza171910.r');
+  assert.notEqual(r.merchant, 'Paid via C');
+});
+
+test('the counterparty bank is never read as the merchant', () => {
+  const r = parseNarration('UPI/THAR THE T/q006883147@ybl/UPI/YES BANK L/644735674625/ICI708/', SEED_NEEDLES);
+  assert.equal(r.merchant, 'THAR THE T');
+});
+
+test('the note wins when it names a known merchant the payee field does not', () => {
+  const r = parseNarration('UPI/7306372789/7306372789@pty/uber/FEDERAL BA/644715745767/ICI323/', SEED_NEEDLES);
+  assert.equal(r.merchant, 'uber', 'a phone-number payee must not beat "uber" beside it');
+});
+
+test('a masked VPA falls back to the payee name', () => {
+  const r = parseNarration('UPI/Raj art st/XX1457@ybl/UPI/YES BANK L/662272834215/ICIf/', SEED_NEEDLES);
+  assert.equal(r.merchant, 'Raj art st');
+});
+
+test('an out-of-order statement still reconciles in total', () => {
+  // Two same-day rows listed in the opposite order to the balance sequence.
+  const txns = [
+    { date: '2026-06-11', amount: 100, direction: 'debit',  balance: 900 },
+    { date: '2026-06-11', amount: 50,  direction: 'credit', balance: 1000 },
+    { date: '2026-06-11', amount: 20,  direction: 'credit', balance: 950 },
+    { date: '2026-06-12', amount: 10,  direction: 'debit',  balance: 960 },
+  ];
+  const c = checkBalanceContinuity(txns);
+  assert.equal(c.netOk, true, 'the set of transactions is complete');
+  assert.ok(c.breaks.length > 0, 'and the ordering anomaly is still located');
+  assert.equal(c.orderingOnly, true, 'which is reported as ordering, not loss');
+  assert.equal(c.ok, false);
+});
+
+test('a genuinely missing row fails the net check', () => {
+  const txns = [
+    { date: '2026-06-11', amount: 100, direction: 'debit', balance: 900 },
+    { date: '2026-06-12', amount: 100, direction: 'debit', balance: 750 },  // 50 unaccounted
+  ];
+  const c = checkBalanceContinuity(txns);
+  assert.equal(c.netOk, false);
+  assert.equal(c.netGap, -50, 'names how much movement no row explains');
+  assert.equal(c.orderingOnly, false);
+});

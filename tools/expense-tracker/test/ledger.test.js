@@ -80,7 +80,7 @@ test('subscriptions surface across months', () => {
   const led = buildLedger(parseAll(msgs));
   const rec = detectRecurring(led.txns);
   assert.equal(rec.length, 1);
-  assert.equal(rec[0].merchant, 'NETFLIX');
+  assert.equal(rec[0].merchant, 'Netflix', 'brand spellings collapse to one name');
   assert.equal(rec[0].annualized, 7788);
 });
 
@@ -130,4 +130,44 @@ Spent Rs.1250.00 On HDFC Bank Card 4521 At AMAZON On 2025-09-11. Avl Lmt INR 1,4
   assert.equal(s.spend, 1400);
   assert.equal(s.txnCount, 3);
   assert.equal(led.noise.length, 1);
+});
+
+test('one brand spelled five ways becomes one merchant', () => {
+  // Every one of these appears in a real ICICI statement for the same shop.
+  const spellings = [
+    'UPI/ZEPTO MARK/zeptonow.bdpg1/UPI/KOTAK MAHI/610912200086/APYA/',
+    'UPI/ZEPTO MARK/zeptomarketpla/Paid via C/HDFC BANK/651826239277/crd/',
+    'UPI/Zepto Mark/zptmktp1@kotak/Paid via C/KOTAK MAHI/653900511528/KJP/',
+    'UPI/Zepto/cf.zepto12@cas/UPI/NSDL PAYME/624073057609/APYA/',
+  ];
+  const txns = spellings.map((raw, i) => ({
+    kind: 'txn', source: 'statement', date: `2026-07-0${i + 1}`,
+    amount: 100 + i, direction: 'debit', merchant: null, raw, confidence: 0.9,
+  }));
+  const led = buildLedger(txns.map((t, i) => {
+    const { merchant } = { merchant: ['ZEPTO MARK', 'zeptomarketpla', 'zptmktp1', 'cf.zepto12'][i] };
+    return { ...t, merchant };
+  }));
+  const names = new Set(led.txns.map(t => t.merchant));
+  assert.deepEqual([...names], ['Zepto'], 'five spellings, one merchant');
+  assert.deepEqual([...new Set(led.txns.map(t => t.category))], ['Groceries']);
+});
+
+test('Swiggy Instamart is groceries while Swiggy is food', () => {
+  const led = buildLedger([
+    { kind: 'txn', date: '2026-07-01', amount: 300, direction: 'debit', merchant: 'Swiggy Ltd', raw: 'UPI/Swiggy Ltd/XXyupi@axb/Pay for In/AXIS/1/', confidence: 0.9 },
+    { kind: 'txn', date: '2026-07-02', amount: 700, direction: 'debit', merchant: 'SWIGGY INSTAMART', raw: 'UPI/SWIGGY INS/swiggystores@a/UPI/AXIS/2/', confidence: 0.9 },
+  ]);
+  const byName = Object.fromEntries(led.txns.map(t => [t.merchant, t.category]));
+  assert.equal(byName['Swiggy'], 'Food & Dining');
+  assert.equal(byName['Swiggy Instamart'], 'Groceries');
+});
+
+test('a refund is categorized as what it refunds, not as shopping', () => {
+  const led = buildLedger([{
+    kind: 'txn', date: '2026-07-01', amount: 149, direction: 'credit',
+    merchant: 'zeptomarketpla', confidence: 0.9,
+    raw: 'UPI/ZEPTO MARK/zeptomarketpla/Refund for/HDFC BANK/103383440119/HDF/',
+  }]);
+  assert.equal(led.txns[0].category, 'Groceries', 'a grocery refund is groceries');
 });

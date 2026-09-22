@@ -4,6 +4,12 @@ A monthly expense tracker built from bank, card and UPI alert messages. Paste th
 messages (or drop in an SMS backup file), and it produces a categorized ledger,
 a month view, and month-over-month trends.
 
+Statement narrations are parsed positionally where the bank uses a fixed shape.
+ICICI writes every UPI line as `UPI / payee / vpa / note / payee's bank / RRN /
+ref`, with each field truncated — so the fifth field must never be read as a
+merchant (or a third of the ledger becomes "YES BANK L"), and the best name may
+be in any of the first four.
+
 Tuned for Indian alert formats: HDFC, ICICI (including Amazon Pay ICICI), SBI,
 Axis, Kotak, AU Small Finance, Federal/Jupiter, CSB, and UPI apps — with a
 generic fallback for templates not listed here.
@@ -12,10 +18,18 @@ generic fallback for templates not listed here.
 
 **Statements are the spine.** A bank or card statement (CSV/Excel) is complete,
 authoritative, and carries a running balance — which lets the import *prove*
-itself. `checkBalanceContinuity()` walks consecutive rows and confirms that
-`previous balance − debit + credit = next balance` for every one. If that holds
-throughout, no row was dropped, duplicated or misread. Where it breaks, the row
-is named. No message-based import can offer that guarantee.
+itself. `checkBalanceContinuity()` asks two different questions of it:
+
+- **Net** — does the opening balance, plus every credit, minus every debit, land
+  exactly on the closing balance? Order-independent, so it is the real test of
+  completeness; it fails only if a row is missing, duplicated or misread.
+- **Per row** — does each row follow from the one above? Good for locating a
+  problem, but banks list same-day transactions in an order that does not always
+  match the balance sequence, so a per-row failure with a clean net result means
+  the rows are merely out of order — normal, and reported as such.
+
+Separating the two is the difference between "your export dropped something" and
+"your bank sorted two rows differently". No message-based import can offer either.
 
 Statement layouts differ per bank and bury the real header under preamble rows,
 so nothing is hard-coded: `detectLayout()` scores candidate header rows, maps
@@ -27,6 +41,19 @@ for. When both sources describe the same payment, the statement wins — see
 `dedupe()`, which matches across sources on the bank reference OR on
 date + amount + account, because one source may know a reference the other does
 not. A category you corrected by hand survives the replacement.
+
+## One brand, one name
+
+A single statement spells one merchant many ways — Zepto alone appears as
+`ZEPTO MARK`, `zeptomarketpla`, `zeptonow.bdpg1`, `zptmktp1` and `cf.zepto12`.
+`canonicalMerchant()` collapses them before dedupe, which is what makes a
+merchant total, a detected subscription, or a "you spent X on Y" figure mean
+anything.
+
+Matching needles is boundary-aware for the same reason it has to be: `vi` (the
+telecom operator) would otherwise match "paid **vi**a card", and `aws` would
+match "l**aws**uit". A needle authored with a trailing space (`'vi '`, `'sip '`)
+must end at a word boundary too.
 
 ## Why it parses the way it does
 
@@ -63,7 +90,7 @@ src/normalize.js   dedupe, reversals, month aggregation, recurring detection
 src/ui.js          the interface
 src/page.html      markup, design tokens, and the bundle placeholder
 build.mjs          inlines the modules into dist/tracker.html (artifacts are one file)
-test/              58 tests over the parsers, the ledger and the balance check
+test/              67 tests over the parsers, the ledger and the balance check
 ```
 
 The modules are the single source of truth: node runs them directly for tests,
@@ -72,7 +99,7 @@ and `build.mjs` flattens them into the published page.
 ## Use
 
 ```sh
-npm test     # 58 tests, no dependencies
+npm test     # 67 tests, no dependencies
 npm run build # -> dist/tracker.html, a self-contained page
 ```
 
