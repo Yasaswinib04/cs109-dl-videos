@@ -7,28 +7,44 @@
  */
 
 export const CATEGORIES = [
-  'Food & Dining', 'Groceries', 'Transport', 'Shopping', 'Bills & Utilities',
-  'Rent & Housing', 'Health', 'Entertainment', 'Travel', 'Education',
-  'Investments', 'Transfers', 'Cash', 'Fees & Charges', 'Taxes', 'Income', 'Other',
+  // Spending, in roughly the order a month gets eaten.
+  'Rent', 'Order in', 'Eat out', 'Groceries', 'Transport', 'Travel',
+  'Shopping', 'Entertainment', 'Gifts', 'Health', 'Bills & Utilities',
+  'Education', 'Taxes', 'Cash', 'Fees & Charges',
+  // Money that moves without being spent, and money coming in.
+  'Investment', 'Transfers', 'Income',
+  // The honest bucket. Never guessed into - see suggestions in normalize.js.
+  'Miscellaneous',
 ];
 
 /** Substring -> category. Ordered: the first match wins, so keep specifics first. */
 const SEED_RULES = [
-  ['Groceries',        ['instamart','swiggy instamart','swiggystores','swiggy stores','blinkit','zepto','instamart','bigbasket','bbdaily','dmart','d-mart','licious','freshtohome','country delight','more retail','reliance fresh','spencer','nature basket','milkbasket','grofers','jiomart','ratnadeep']],
-  ['Food & Dining',    ['swiggy','sweet','bakers','biriyani','dhaba','hotel ','foods','tiffin','canteen','juice','icecream','ice cream','zomato','eatfit','dominos','domino','pizza','mcdonald','kfc','burger','starbucks','chaayos','third wave','blue tokai','cafe','coffee','restaurant','biryani','bakery','dineout','eazydiner','faasos','behrouz','wow momo','haldiram','barbeque','subway','dunkin','baskin','chai point']],
-  ['Transport',        ['uber','rapido','rapidi','namma','auto ','ola ','olacabs','rapido','namma yatri','yulu','bounce','blusmart','blu smart','metro','bmtc','dmrc','fastag','petrol','fuel','hpcl','iocl','bpcl','indian oil','shell','nayara','park+','parking']],
-  ['Travel',           ['irctc','indigo','vistara','air india','akasa','spicejet','makemytrip','goibibo','yatra','cleartrip','ixigo','redbus','abhibus','oyo','airbnb','booking.com','agoda','trivago','easemytrip']],
-  ['Shopping',         ['amazon','flipkart','myntra','ajio','nykaa','meesho','tatacliq','tata cliq','snapdeal','decathlon','ikea','lifestyle','shoppers stop','westside','zara','h&m','uniqlo','croma','reliance digital','vijay sales','pepperfry','urban ladder','boat','firstcry']],
-  ['Bills & Utilities',['jio','googlecloud','google cloud','aws','digitalocean','airtel','vodafone','vi ','bsnl','act fibernet','hathway','excitel','tata play','dish tv','bescom','tneb','msedcl','adani electricity','tata power','torrent power','mahadiscom','bses','indraprastha gas','mahanagar gas','gail','hp gas','bharat gas','indane','water bill','broadband','recharge','electricity','postpaid','prepaid']],
-  ['Rent & Housing',   ['rent','landlord','nobroker','housing.com','magicbricks','maintenance','society','apartment','flat rent','pg ','hostel']],
-  ['Health',           ['meds','pharma','health','amaha','manipal','diagnost','apollo','pharmeasy','1mg','tata 1mg','netmeds','medplus','practo','cult','cultfit','gym','fitness','hospital','clinic','diagnostic','thyrocare','dr lal','metropolis','lenskart','titan eye','dental','pharmacy','medical']],
-  ['Entertainment',    ['netflix','google pla','googleplay','play store','spotify','hotstar','jiocinema','jiohotstar','prime video','sonyliv','zee5','youtube','bookmyshow','pvr','inox','cinepolis','audible','kindle','playstation','steam','xbox','nintendo','dream11','gaming']],
-  ['Education',        ['udemy','coursera','unacademy','byju','vedantu','upgrad','simplilearn','great learning','scaler','newton','physics wallah','tuition','school fee','college','university','exam fee','skillshare','duolingo']],
-  ['Investments',      ['investment','zerodha','groww','upstox','angel one','angelone','icici direct','hdfc securities','kuvera','coin','indmoney','smallcase','paytm money','mutual fund','sip ','nps ','ppf','elss','nippon','sbi mf','axis mf','hdfc mf','icici pru','mirae','parag parikh','quant mf','lic ','term plan','insurance','policybazaar','gold bond','sgb']],
-  ['Transfers',        ['transfer to own account','self transfer','cred','credit card payment','cc payment','card payment','billdesk','autopay','own account','self transfer','to self','credit card bill']],
-  ['Cash',             ['atm','cash withdrawal','cash wdl','withdrawn']],
+  // Money moving between your own pockets has to win over everything else,
+  // or a card-bill payment gets counted as a second purchase.
+  ['Transfers',        ['transfer to own account','self transfer','cred ','cred.club','cred club','dreamplug','credit card payment','cc payment','card payment','credit card bill','billdesk','own account']],
   ['Taxes',            ['directtax','direct tax','income tax','incometax','itns','advance tax','self assessment','tds ','gst pay','property tax']],
-  ['Fees & Charges',   ['charges','gst','annual fee','late fee','penalty','interest','service charge','processing fee','convenience fee','surcharge','amc ','renewal fee']],
+  ['Investment',       ['investment','zerodha','groww','upstox','angel one','angelone','icici direct','hdfc securities','kuvera','smallcase','indmoney','paytm money','mutual fund','sip ','nps ','ppf','elss','nippon','mirae','parag parikh','quant mf','gold bond','sgb','coin dcx','coindcx']],
+  ['Rent',             ['rent','landlord','nobroker','maintenance','society','pg ','hostel']],
+
+  // Groceries before eating out: "Swiggy Instamart" is a grocery run, and the
+  // plain "swiggy" rule below must not claim it first.
+  ['Groceries',        ['instamart','swiggystores','swiggy stores','blinkit','grofers','zepto','zptmktp','bigbasket','bbdaily','dmart','d-mart','jiomart','licious','freshtohome','country delight','milkbasket','reliance fresh','more retail','ratnadeep','kirana','provision','supermarket','super market','stores','store']],
+  ['Order in',         ['swiggy','zomato','eatsure','faasos','box8','behrouz','ovenstory','dunzo','magicpin']],
+  ['Eat out',          ['restaurant','cafe','coffee','starbucks','chaayos','third wave','blue tokai','bakery','sweet','biryani','biriyani','dhaba','hotel ','tiffin','canteen','juice','ice cream','icecream','darshini','udupi','barbeque','bbq','pizza','domino','mcdonald','kfc','burger','subway','wow momo','haldiram','chai','dineout','eazydiner','bar ','brewery','kitchen','foods','snack']],
+
+  // Out-of-town travel before in-city transport: redBus and IRCTC are journeys,
+  // not commutes.
+  ['Travel',           ['irctc','indigo','vistara','air india','akasa','spicejet','makemytrip','goibibo','yatra','cleartrip','ixigo','easemytrip','redbus','abhibus','oyo','airbnb','booking.com','agoda','treebo','fabhotel','resort','homestay','airlines','airline','railway']],
+  ['Transport',        ['uber','rapido','rapidi','olacabs','ola ','namma','yulu','bounce','blusmart','blu smart','metro','bmtc','dmrc','fastag','parking','park+','petrol','fuel','hpcl','iocl','bpcl','indian oil','shell','nayara']],
+
+  ['Health',           ['apollo','pharmeasy','1mg','netmeds','medplus','practo','manipal','amaha','fortis','narayana','aster','meds','pharma','health','hospital','clinic','diagnost','thyrocare','dr lal','metropolis','lenskart','dental','medical','cult','gym','fitness']],
+  ['Bills & Utilities',['jio','airtel','vodafone','vi ','bsnl','act fibernet','hathway','excitel','tata play','bescom','tneb','msedcl','adani electricity','tata power','torrent power','bses','indraprastha gas','mahanagar gas','hp gas','bharat gas','indane','electricity','broadband','postpaid','prepaid','recharge','googlecloud','google cloud','aws ','digitalocean','cred.telecom']],
+  ['Entertainment',    ['netflix','spotify','hotstar','jiocinema','jiohotstar','prime video','sonyliv','zee5','youtube','bookmyshow','pvr','inox','cinepolis','audible','kindle','playstation','steam','xbox','google pla','googleplay','play store','gaming']],
+  ['Education',        ['udemy','coursera','unacademy','byju','vedantu','upgrad','simplilearn','great learning','scaler','physics wallah','tuition','school fee','college','university','exam fee','skillshare','duolingo']],
+  ['Shopping',         ['amazon','amzn','flipkart','myntra','ajio','nykaa','meesho','tatacliq','tata cliq','snapdeal','decathlon','ikea','lifestyle','shoppers stop','westside','zara','uniqlo','croma','reliance digital','vijay sales','pepperfry','urban ladder','firstcry','boat lifestyle']],
+  ['Gifts',            ['gift','giftcard','gift card','ferns','igp.com','archies']],
+  ['Cash',             ['atm','cash withdrawal','cash wdl','withdrawn']],
+  ['Fees & Charges',   ['charges','annual fee','late fee','penalty','service charge','processing fee','convenience fee','surcharge','amc ','renewal fee','gst ']],
 ];
 
 /** Credits that are genuinely income rather than a refund or a transfer back. */
@@ -70,7 +86,7 @@ export function categorize(txn, rules = {}) {
   for (const [category, needles] of SEED_RULES) {
     if (needles.some(n => needleMatches(hay, n))) return { category, source: 'seed' };
   }
-  return { category: 'Other', source: 'fallback' };
+  return { category: 'Miscellaneous', source: 'fallback' };
 }
 
 /**

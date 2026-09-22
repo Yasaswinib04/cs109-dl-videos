@@ -153,13 +153,13 @@ test('one brand spelled five ways becomes one merchant', () => {
   assert.deepEqual([...new Set(led.txns.map(t => t.category))], ['Groceries']);
 });
 
-test('Swiggy Instamart is groceries while Swiggy is food', () => {
+test('Swiggy Instamart is groceries while Swiggy is order-in', () => {
   const led = buildLedger([
     { kind: 'txn', date: '2026-07-01', amount: 300, direction: 'debit', merchant: 'Swiggy Ltd', raw: 'UPI/Swiggy Ltd/XXyupi@axb/Pay for In/AXIS/1/', confidence: 0.9 },
     { kind: 'txn', date: '2026-07-02', amount: 700, direction: 'debit', merchant: 'SWIGGY INSTAMART', raw: 'UPI/SWIGGY INS/swiggystores@a/UPI/AXIS/2/', confidence: 0.9 },
   ]);
   const byName = Object.fromEntries(led.txns.map(t => [t.merchant, t.category]));
-  assert.equal(byName['Swiggy'], 'Food & Dining');
+  assert.equal(byName['Swiggy'], 'Order in');
   assert.equal(byName['Swiggy Instamart'], 'Groceries');
 });
 

@@ -106,8 +106,8 @@ test('statement rows categorize correctly end to end', () => {
   assert.equal(s.invested, 15000, 'the Zerodha mandate is investing, not spending');
   assert.equal(s.spend, 30817, 'rent + swiggy + amazon + atm');
   const cats = Object.fromEntries(s.byCategory.map(c => [c.key, c.amount]));
-  assert.equal(cats['Rent & Housing'], 24000);
-  assert.equal(cats['Food & Dining'], 318);
+  assert.equal(cats['Rent'], 24000);
+  assert.equal(cats['Order in'], 318);
   assert.equal(cats['Cash'], 4000);
 });
 

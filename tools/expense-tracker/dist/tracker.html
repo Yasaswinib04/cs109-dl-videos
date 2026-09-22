@@ -34,6 +34,7 @@
 }
 
 * { box-sizing:border-box; }
+[hidden] { display:none !important; }
 body { background:var(--ground); color:var(--ink); font-family:var(--sans); font-size:15px; line-height:1.5; }
 .wrap { max-width:1120px; margin:0 auto; padding-inline:20px; padding-block:0 64px; }
 h1,h2,h3 { text-wrap:balance; margin:0; }
@@ -123,6 +124,8 @@ td { padding:9px 10px 9px 0; border-bottom:1px solid var(--line); vertical-align
 tr:last-child td { border-bottom:0; }
 .num { text-align:right; padding-right:0; }
 th.num { padding-right:0; }
+/* A cell after a right-aligned one needs its own gutter, or the headings touch. */
+.num + th, .num + td { padding-left:18px; }
 .mono { font-family:var(--mono); font-variant-numeric:tabular-nums; font-size:12.5px; }
 .dim { color:var(--muted); }
 .merchant { font-weight:500; }
@@ -149,8 +152,6 @@ th.num { padding-right:0; }
 /* ---------- drawer ---------- */
 .drawer { position:fixed; inset:0; z-index:40; background:rgba(15,17,22,.5); backdrop-filter:blur(3px);
   display:flex; align-items:flex-end; justify-content:center; }
-/* .drawer's display would otherwise beat the UA rule for [hidden]. */
-.drawer[hidden] { display:none; }
 .drawer-card { background:var(--surface); border:1px solid var(--line); border-radius:14px 14px 0 0;
   width:min(680px,100%); max-height:88vh; overflow-y:auto; padding:24px; box-shadow:var(--shadow); }
 .drawer-head { display:flex; align-items:center; justify-content:space-between; gap:12px; margin-bottom:6px; }
@@ -168,6 +169,19 @@ textarea { width:100%; min-height:170px; background:var(--sunk); border:1px soli
   color:var(--muted); margin-bottom:9px; font-weight:400; }
 .how ol { margin:0; padding-left:18px; display:flex; flex-direction:column; gap:5px; }
 .how code { font-family:var(--mono); font-size:11.5px; background:var(--sunk); padding:1px 5px; border-radius:4px; }
+
+/* ---------- tidy up ---------- */
+.tab-badge { display:inline-block; margin-left:6px; background:var(--accent); color:var(--on-accent);
+  font-family:var(--mono); font-size:9.5px; padding:1px 5px; border-radius:20px; vertical-align:1px; }
+.suggest { border:1px solid color-mix(in srgb, var(--accent) 30%, var(--line)); background:var(--accent-soft);
+  border-radius:var(--r); padding:18px 20px; margin-bottom:14px; }
+.suggest h3 { font-size:15px; margin:0 0 5px; font-weight:600; }
+.suggest .why { font-size:13px; color:var(--ink-2); margin-bottom:14px; }
+.suggest-actions { display:flex; flex-wrap:wrap; gap:10px; align-items:center; }
+.suggest-peek { display:flex; flex-wrap:wrap; gap:6px; margin-top:14px; }
+.peek { font-family:var(--mono); font-size:10.5px; background:var(--surface); border:1px solid var(--line);
+  border-radius:5px; padding:3px 7px; color:var(--ink-2); }
+.peek-more { color:var(--muted); font-size:11px; align-self:center; }
 
 /* ---------- statement import ---------- */
 .step { margin-top:16px; }
@@ -224,6 +238,7 @@ textarea { width:100%; min-height:170px; background:var(--sunk); border:1px soli
     <div class="tabs" role="tablist">
       <button class="tab" id="tab-month" role="tab" aria-selected="true">Month</button>
       <button class="tab" id="tab-trends" role="tab" aria-selected="false">Trends</button>
+      <button class="tab" id="tab-tidy" role="tab" aria-selected="false">Tidy up<span class="tab-badge" id="tidy-count" hidden></span></button>
     </div>
     <select id="month-select" aria-label="Month to show"></select>
     <button class="btn btn-primary" id="btn-import">Import</button>
@@ -581,28 +596,44 @@ function splitMessages(blob) {
  */
 
 const CATEGORIES = [
-  'Food & Dining', 'Groceries', 'Transport', 'Shopping', 'Bills & Utilities',
-  'Rent & Housing', 'Health', 'Entertainment', 'Travel', 'Education',
-  'Investments', 'Transfers', 'Cash', 'Fees & Charges', 'Taxes', 'Income', 'Other',
+  // Spending, in roughly the order a month gets eaten.
+  'Rent', 'Order in', 'Eat out', 'Groceries', 'Transport', 'Travel',
+  'Shopping', 'Entertainment', 'Gifts', 'Health', 'Bills & Utilities',
+  'Education', 'Taxes', 'Cash', 'Fees & Charges',
+  // Money that moves without being spent, and money coming in.
+  'Investment', 'Transfers', 'Income',
+  // The honest bucket. Never guessed into - see suggestions in normalize.js.
+  'Miscellaneous',
 ];
 
 /** Substring -> category. Ordered: the first match wins, so keep specifics first. */
 const SEED_RULES = [
-  ['Groceries',        ['instamart','swiggy instamart','swiggystores','swiggy stores','blinkit','zepto','instamart','bigbasket','bbdaily','dmart','d-mart','licious','freshtohome','country delight','more retail','reliance fresh','spencer','nature basket','milkbasket','grofers','jiomart','ratnadeep']],
-  ['Food & Dining',    ['swiggy','sweet','bakers','biriyani','dhaba','hotel ','foods','tiffin','canteen','juice','icecream','ice cream','zomato','eatfit','dominos','domino','pizza','mcdonald','kfc','burger','starbucks','chaayos','third wave','blue tokai','cafe','coffee','restaurant','biryani','bakery','dineout','eazydiner','faasos','behrouz','wow momo','haldiram','barbeque','subway','dunkin','baskin','chai point']],
-  ['Transport',        ['uber','rapido','rapidi','namma','auto ','ola ','olacabs','rapido','namma yatri','yulu','bounce','blusmart','blu smart','metro','bmtc','dmrc','fastag','petrol','fuel','hpcl','iocl','bpcl','indian oil','shell','nayara','park+','parking']],
-  ['Travel',           ['irctc','indigo','vistara','air india','akasa','spicejet','makemytrip','goibibo','yatra','cleartrip','ixigo','redbus','abhibus','oyo','airbnb','booking.com','agoda','trivago','easemytrip']],
-  ['Shopping',         ['amazon','flipkart','myntra','ajio','nykaa','meesho','tatacliq','tata cliq','snapdeal','decathlon','ikea','lifestyle','shoppers stop','westside','zara','h&m','uniqlo','croma','reliance digital','vijay sales','pepperfry','urban ladder','boat','firstcry']],
-  ['Bills & Utilities',['jio','googlecloud','google cloud','aws','digitalocean','airtel','vodafone','vi ','bsnl','act fibernet','hathway','excitel','tata play','dish tv','bescom','tneb','msedcl','adani electricity','tata power','torrent power','mahadiscom','bses','indraprastha gas','mahanagar gas','gail','hp gas','bharat gas','indane','water bill','broadband','recharge','electricity','postpaid','prepaid']],
-  ['Rent & Housing',   ['rent','landlord','nobroker','housing.com','magicbricks','maintenance','society','apartment','flat rent','pg ','hostel']],
-  ['Health',           ['meds','pharma','health','amaha','manipal','diagnost','apollo','pharmeasy','1mg','tata 1mg','netmeds','medplus','practo','cult','cultfit','gym','fitness','hospital','clinic','diagnostic','thyrocare','dr lal','metropolis','lenskart','titan eye','dental','pharmacy','medical']],
-  ['Entertainment',    ['netflix','google pla','googleplay','play store','spotify','hotstar','jiocinema','jiohotstar','prime video','sonyliv','zee5','youtube','bookmyshow','pvr','inox','cinepolis','audible','kindle','playstation','steam','xbox','nintendo','dream11','gaming']],
-  ['Education',        ['udemy','coursera','unacademy','byju','vedantu','upgrad','simplilearn','great learning','scaler','newton','physics wallah','tuition','school fee','college','university','exam fee','skillshare','duolingo']],
-  ['Investments',      ['investment','zerodha','groww','upstox','angel one','angelone','icici direct','hdfc securities','kuvera','coin','indmoney','smallcase','paytm money','mutual fund','sip ','nps ','ppf','elss','nippon','sbi mf','axis mf','hdfc mf','icici pru','mirae','parag parikh','quant mf','lic ','term plan','insurance','policybazaar','gold bond','sgb']],
-  ['Transfers',        ['transfer to own account','self transfer','cred','credit card payment','cc payment','card payment','billdesk','autopay','own account','self transfer','to self','credit card bill']],
-  ['Cash',             ['atm','cash withdrawal','cash wdl','withdrawn']],
+  // Money moving between your own pockets has to win over everything else,
+  // or a card-bill payment gets counted as a second purchase.
+  ['Transfers',        ['transfer to own account','self transfer','cred ','cred.club','cred club','dreamplug','credit card payment','cc payment','card payment','credit card bill','billdesk','own account']],
   ['Taxes',            ['directtax','direct tax','income tax','incometax','itns','advance tax','self assessment','tds ','gst pay','property tax']],
-  ['Fees & Charges',   ['charges','gst','annual fee','late fee','penalty','interest','service charge','processing fee','convenience fee','surcharge','amc ','renewal fee']],
+  ['Investment',       ['investment','zerodha','groww','upstox','angel one','angelone','icici direct','hdfc securities','kuvera','smallcase','indmoney','paytm money','mutual fund','sip ','nps ','ppf','elss','nippon','mirae','parag parikh','quant mf','gold bond','sgb','coin dcx','coindcx']],
+  ['Rent',             ['rent','landlord','nobroker','maintenance','society','pg ','hostel']],
+
+  // Groceries before eating out: "Swiggy Instamart" is a grocery run, and the
+  // plain "swiggy" rule below must not claim it first.
+  ['Groceries',        ['instamart','swiggystores','swiggy stores','blinkit','grofers','zepto','zptmktp','bigbasket','bbdaily','dmart','d-mart','jiomart','licious','freshtohome','country delight','milkbasket','reliance fresh','more retail','ratnadeep','kirana','provision','supermarket','super market','stores','store']],
+  ['Order in',         ['swiggy','zomato','eatsure','faasos','box8','behrouz','ovenstory','dunzo','magicpin']],
+  ['Eat out',          ['restaurant','cafe','coffee','starbucks','chaayos','third wave','blue tokai','bakery','sweet','biryani','biriyani','dhaba','hotel ','tiffin','canteen','juice','ice cream','icecream','darshini','udupi','barbeque','bbq','pizza','domino','mcdonald','kfc','burger','subway','wow momo','haldiram','chai','dineout','eazydiner','bar ','brewery','kitchen','foods','snack']],
+
+  // Out-of-town travel before in-city transport: redBus and IRCTC are journeys,
+  // not commutes.
+  ['Travel',           ['irctc','indigo','vistara','air india','akasa','spicejet','makemytrip','goibibo','yatra','cleartrip','ixigo','easemytrip','redbus','abhibus','oyo','airbnb','booking.com','agoda','treebo','fabhotel','resort','homestay','airlines','airline','railway']],
+  ['Transport',        ['uber','rapido','rapidi','olacabs','ola ','namma','yulu','bounce','blusmart','blu smart','metro','bmtc','dmrc','fastag','parking','park+','petrol','fuel','hpcl','iocl','bpcl','indian oil','shell','nayara']],
+
+  ['Health',           ['apollo','pharmeasy','1mg','netmeds','medplus','practo','manipal','amaha','fortis','narayana','aster','meds','pharma','health','hospital','clinic','diagnost','thyrocare','dr lal','metropolis','lenskart','dental','medical','cult','gym','fitness']],
+  ['Bills & Utilities',['jio','airtel','vodafone','vi ','bsnl','act fibernet','hathway','excitel','tata play','bescom','tneb','msedcl','adani electricity','tata power','torrent power','bses','indraprastha gas','mahanagar gas','hp gas','bharat gas','indane','electricity','broadband','postpaid','prepaid','recharge','googlecloud','google cloud','aws ','digitalocean','cred.telecom']],
+  ['Entertainment',    ['netflix','spotify','hotstar','jiocinema','jiohotstar','prime video','sonyliv','zee5','youtube','bookmyshow','pvr','inox','cinepolis','audible','kindle','playstation','steam','xbox','google pla','googleplay','play store','gaming']],
+  ['Education',        ['udemy','coursera','unacademy','byju','vedantu','upgrad','simplilearn','great learning','scaler','physics wallah','tuition','school fee','college','university','exam fee','skillshare','duolingo']],
+  ['Shopping',         ['amazon','amzn','flipkart','myntra','ajio','nykaa','meesho','tatacliq','tata cliq','snapdeal','decathlon','ikea','lifestyle','shoppers stop','westside','zara','uniqlo','croma','reliance digital','vijay sales','pepperfry','urban ladder','firstcry','boat lifestyle']],
+  ['Gifts',            ['gift','giftcard','gift card','ferns','igp.com','archies']],
+  ['Cash',             ['atm','cash withdrawal','cash wdl','withdrawn']],
+  ['Fees & Charges',   ['charges','annual fee','late fee','penalty','service charge','processing fee','convenience fee','surcharge','amc ','renewal fee','gst ']],
 ];
 
 /** Credits that are genuinely income rather than a refund or a transfer back. */
@@ -644,7 +675,7 @@ function categorize(txn, rules = {}) {
   for (const [category, needles] of SEED_RULES) {
     if (needles.some(n => needleMatches(hay, n))) return { category, source: 'seed' };
   }
-  return { category: 'Other', source: 'fallback' };
+  return { category: 'Miscellaneous', source: 'fallback' };
 }
 
 /**
@@ -1306,7 +1337,7 @@ function monthOf(t) {
 }
 
 /** Categories that move money without consuming it. */
-const NON_SPEND = new Set(['Transfers', 'Investments']);
+const NON_SPEND = new Set(['Transfers', 'Investment']);
 
 function summarizeMonth(txns, month) {
   const inMonth = txns.filter(t => monthOf(t) === month && !t.netted);
@@ -1318,7 +1349,7 @@ function summarizeMonth(txns, month) {
   const spendTxns = debits.filter(t => !NON_SPEND.has(t.category));
   const income = sum(credits.filter(t => t.category === 'Income'));
   const spend = sum(spendTxns);
-  const invested = sum(debits.filter(t => t.category === 'Investments'));
+  const invested = sum(debits.filter(t => t.category === 'Investment'));
   const transfers = sum(debits.filter(t => t.category === 'Transfers'));
 
   const group = (arr, keyFn) => {
@@ -1384,6 +1415,75 @@ function detectRecurring(txns) {
     });
   }
   return recurring.sort((a, b) => b.annualized - a.annualized);
+}
+
+/**
+ * Propose categories for the long tail the rule table cannot reach.
+ *
+ * Most unlabelled rows are payments to a person's own UPI handle with no note -
+ * a ride paid straight to the driver, or the shop on the corner. No rule table
+ * can name those, and a learned rule is useless for rides because the payee is
+ * a different driver every time. What IS learnable is the shape:
+ *
+ *   - A payee seen ONCE, for a small amount in the range your known rides
+ *     actually fall in, is very likely a ride.
+ *   - A payee seen SEVERAL times for small amounts is somewhere you go back to -
+ *     a regular shop - so one decision should settle all of its rows.
+ *
+ * These are suggestions with their evidence attached, never silent assignments:
+ * a wrong category that nobody saw being applied is worse than an honest
+ * "Miscellaneous", because it corrupts the totals invisibly.
+ *
+ * The ride band is derived from the user's OWN labelled rides where there are
+ * enough of them, rather than a number picked in advance.
+ */
+function suggestCategories(txns) {
+  const spendable = txns.filter(t => t.direction === 'debit' && !t.netted);
+  const unknown = spendable.filter(t => t.category === 'Miscellaneous');
+  if (!unknown.length) return { rides: [], groups: [], band: null };
+
+  const rideAmounts = spendable
+    .filter(t => /^(uber|rapido|ola)$/i.test(t.merchant || ''))
+    .map(t => t.amount).sort((a, b) => a - b);
+
+  const at = q => rideAmounts[Math.floor(rideAmounts.length * q)];
+  const band = rideAmounts.length >= 10
+    ? { low: Math.max(20, Math.round(at(0.1) * 0.6)), high: Math.round(at(0.9) * 1.6), learned: true }
+    : { low: 30, high: 400, learned: false };
+
+  const seen = new Map();
+  for (const t of spendable) {
+    const k = normKey(t.merchant);
+    if (!k) continue;
+    seen.set(k, (seen.get(k) || 0) + 1);
+  }
+
+  const rides = [];
+  const groupMap = new Map();
+  for (const t of unknown) {
+    const k = normKey(t.merchant);
+    const count = seen.get(k) || 1;
+    if (count === 1 && t.amount >= band.low && t.amount <= band.high) {
+      rides.push(t);
+    } else if (count >= 2) {
+      if (!groupMap.has(k)) groupMap.set(k, { key: k, merchant: t.merchant, txns: [] });
+      groupMap.get(k).txns.push(t);
+    }
+  }
+
+  const groups = [...groupMap.values()].map(g => ({
+    ...g,
+    count: g.txns.length,
+    total: Math.round(g.txns.reduce((a, t) => a + t.amount, 0) * 100) / 100,
+    avg: Math.round((g.txns.reduce((a, t) => a + t.amount, 0) / g.txns.length) * 100) / 100,
+  })).sort((a, b) => b.total - a.total);
+
+  return {
+    band,
+    rides: rides.sort((a, b) => (a.date || '').localeCompare(b.date || '')),
+    ridesTotal: Math.round(rides.reduce((a, t) => a + t.amount, 0) * 100) / 100,
+    groups,
+  };
 }
 
 function listMonths(txns) {
@@ -1855,7 +1955,8 @@ function render() {
   const months = listMonths(State.txns);
   if (!State.month || (!months.includes(State.month) && months.length)) State.month = months[0];
   renderHeader(months);
-  el('view').innerHTML = State.tab === 'month' ? monthView() : trendsView();
+  el('view').innerHTML = State.tab === 'month' ? monthView()
+    : State.tab === 'trends' ? trendsView() : tidyView();
   el('review-panel').innerHTML = reviewPanel();
   wireView();
 }
@@ -1866,7 +1967,10 @@ function renderHeader(months) {
     : `<option>No data yet</option>`;
   el('month-select').innerHTML = opts;
   el('month-select').disabled = !months.length;
-  for (const t of ['month', 'trends']) el(`tab-${t}`).setAttribute('aria-selected', String(State.tab === t));
+  for (const t of ['month', 'trends', 'tidy']) el(`tab-${t}`).setAttribute('aria-selected', String(State.tab === t));
+  const unlabelled = State.txns.filter(t => t.direction === 'debit' && !t.netted && t.category === 'Miscellaneous').length;
+  el('tidy-count').textContent = unlabelled;
+  el('tidy-count').hidden = !unlabelled;
   el('sample-banner').hidden = !State.sample;
   el('storage-note').textContent = State.store.kind === 'db'
     ? 'Saved to this page'
@@ -1999,6 +2103,86 @@ function catTrendTable(months) {
     }).join('')}</tr>`).join('')}</tbody></table></div>`;
 }
 
+/* ---------------------------------------------------------------- tidy up */
+
+/**
+ * The long tail is payments to people's own UPI handles with no note, which no
+ * rule table can name. Rather than guessing, this shows the two patterns that
+ * ARE learnable, with the evidence, and makes one decision settle many rows.
+ */
+function tidyView() {
+  const sg = suggestCategories(State.txns);
+  const misc = State.txns.filter(t => t.direction === 'debit' && !t.netted && t.category === 'Miscellaneous');
+
+  if (!misc.length) {
+    return `<section class="panel"><h2>Tidy up</h2>
+      <p class="empty">Nothing unlabelled — every transaction has a category.</p></section>`;
+  }
+
+  const catOptions = sel => CATEGORIES.map(c => `<option${c === sel ? ' selected' : ''}>${c}</option>`).join('');
+
+  const ridesBlock = sg.rides.length ? `
+    <div class="suggest">
+      <h3>${sg.rides.length} payments look like rides</h3>
+      <p class="why">Each went to a handle you paid <strong>only once</strong>, for
+        ${INR(sg.band.low)}–${INR(sg.band.high)} —
+        ${sg.band.learned ? 'the range your own Rapido and Uber rides fall in' : 'a typical fare range'}.
+        That is the shape of paying a driver directly. Together they come to
+        <strong>${INR(sg.ridesTotal)}</strong>.</p>
+      <div class="suggest-actions">
+        <select id="ride-cat" aria-label="Category for these payments">${catOptions('Transport')}</select>
+        <button class="btn btn-primary" id="btn-apply-rides">Apply to all ${sg.rides.length}</button>
+      </div>
+      <div class="suggest-peek">
+        ${sg.rides.slice(0, 12).map(t => `<span class="peek">${esc((t.date || '').slice(5))} · ${INR(t.amount)}</span>`).join('')}
+        ${sg.rides.length > 12 ? `<span class="peek-more">+ ${sg.rides.length - 12} more</span>` : ''}
+      </div>
+    </div>` : '';
+
+  const groupsBlock = sg.groups.length ? `
+    <section class="panel">
+      <h2>Places you go back to <span class="count">${sg.groups.length}</span></h2>
+      <p class="note" style="margin:0 0 14px">You have paid each of these more than once, so they are somewhere
+        rather than someone one-off. Set a category and it applies to every payment to that payee, past and future.</p>
+      <div class="table-wrap"><table>
+        <thead><tr><th>Payee</th><th class="num">Times</th><th class="num">Average</th><th class="num">Total</th><th>Category</th></tr></thead>
+        <tbody>${sg.groups.map((g, i) => `<tr>
+          <td class="merchant">${esc(g.merchant || 'Unknown')}</td>
+          <td class="num mono">${g.count}</td>
+          <td class="num mono dim">${INR(g.avg)}</td>
+          <td class="num mono">${INR(g.total)}</td>
+          <td><select class="group-cat" data-group="${i}" aria-label="Category for ${esc(g.merchant || 'payee')}">
+            <option value="">— pick —</option>${catOptions(null)}</select></td>
+        </tr>`).join('')}</tbody>
+      </table></div>
+    </section>` : '';
+
+  const leftover = misc.length - sg.rides.length - sg.groups.reduce((a, g) => a + g.count, 0);
+  return `
+    <section class="panel">
+      <h2>Unlabelled <span class="count">${misc.length}</span></h2>
+      <p class="note" style="margin:0 0 16px">${INR(misc.reduce((a, t) => a + t.amount, 0))} across ${misc.length} payments has no category.
+        Nothing here is guessed for you — these are patterns with their reasoning shown, so you can check before accepting.</p>
+      ${ridesBlock}
+    </section>
+    ${groupsBlock}
+    ${leftover > 0 ? `<p class="note">${leftover} other payments do not fit either pattern — categorize those on the Month tab.</p>` : ''}`;
+}
+
+async function applyToMany(txnList, category, learnFrom) {
+  const ids = new Set(txnList.map(t => t.id));
+  let n = 0;
+  for (const t of State.txns) {
+    if (!ids.has(t.id)) continue;
+    t.category = category; t.categorySource = 'user'; n++;
+  }
+  // A one-off payee teaches us nothing for next time; a repeat payee does.
+  if (learnFrom) State.rules = learnRule(State.rules, learnFrom, category);
+  await persist();
+  render();
+  toast(`${n} payment${n === 1 ? '' : 's'} moved to ${category}.`);
+}
+
 function reviewPanel() {
   if (!State.review.length) return '';
   return `<section class="panel panel-review">
@@ -2030,6 +2214,22 @@ function wireView() {
   for (const b of document.querySelectorAll('[data-review-drop]')) {
     b.addEventListener('click', () => dropReview(+b.dataset.reviewDrop));
   }
+  const applyRides = el('btn-apply-rides');
+  if (applyRides) {
+    applyRides.addEventListener('click', () => {
+      const sg = suggestCategories(State.txns);
+      applyToMany(sg.rides, el('ride-cat').value, null);
+    });
+  }
+  for (const sel of document.querySelectorAll('.group-cat')) {
+    sel.addEventListener('change', e => {
+      if (!e.target.value) return;
+      const sg = suggestCategories(State.txns);
+      const g = sg.groups[Number(e.target.dataset.group)];
+      if (g) applyToMany(g.txns, e.target.value, g.merchant);
+    });
+  }
+
   const tip = el('tip');
   for (const c of document.querySelectorAll('.col')) {
     c.addEventListener('pointerenter', e => {
@@ -2120,7 +2320,7 @@ el('btn-parse').addEventListener('click', () => importText(el('paste-box').value
 el('btn-export').addEventListener('click', exportCsv);
 el('btn-clear').addEventListener('click', clearAll);
 el('month-select').addEventListener('change', e => { State.month = e.target.value; render(); });
-for (const t of ['month', 'trends']) {
+for (const t of ['month', 'trends', 'tidy']) {
   el(`tab-${t}`).addEventListener('click', () => { State.tab = t; render(); });
 }
 el('file-input').addEventListener('change', async e => {

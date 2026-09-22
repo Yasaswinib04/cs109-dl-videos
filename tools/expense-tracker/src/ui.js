@@ -461,7 +461,8 @@ function render() {
   const months = listMonths(State.txns);
   if (!State.month || (!months.includes(State.month) && months.length)) State.month = months[0];
   renderHeader(months);
-  el('view').innerHTML = State.tab === 'month' ? monthView() : trendsView();
+  el('view').innerHTML = State.tab === 'month' ? monthView()
+    : State.tab === 'trends' ? trendsView() : tidyView();
   el('review-panel').innerHTML = reviewPanel();
   wireView();
 }
@@ -472,7 +473,10 @@ function renderHeader(months) {
     : `<option>No data yet</option>`;
   el('month-select').innerHTML = opts;
   el('month-select').disabled = !months.length;
-  for (const t of ['month', 'trends']) el(`tab-${t}`).setAttribute('aria-selected', String(State.tab === t));
+  for (const t of ['month', 'trends', 'tidy']) el(`tab-${t}`).setAttribute('aria-selected', String(State.tab === t));
+  const unlabelled = State.txns.filter(t => t.direction === 'debit' && !t.netted && t.category === 'Miscellaneous').length;
+  el('tidy-count').textContent = unlabelled;
+  el('tidy-count').hidden = !unlabelled;
   el('sample-banner').hidden = !State.sample;
   el('storage-note').textContent = State.store.kind === 'db'
     ? 'Saved to this page'
@@ -605,6 +609,86 @@ function catTrendTable(months) {
     }).join('')}</tr>`).join('')}</tbody></table></div>`;
 }
 
+/* ---------------------------------------------------------------- tidy up */
+
+/**
+ * The long tail is payments to people's own UPI handles with no note, which no
+ * rule table can name. Rather than guessing, this shows the two patterns that
+ * ARE learnable, with the evidence, and makes one decision settle many rows.
+ */
+function tidyView() {
+  const sg = suggestCategories(State.txns);
+  const misc = State.txns.filter(t => t.direction === 'debit' && !t.netted && t.category === 'Miscellaneous');
+
+  if (!misc.length) {
+    return `<section class="panel"><h2>Tidy up</h2>
+      <p class="empty">Nothing unlabelled — every transaction has a category.</p></section>`;
+  }
+
+  const catOptions = sel => CATEGORIES.map(c => `<option${c === sel ? ' selected' : ''}>${c}</option>`).join('');
+
+  const ridesBlock = sg.rides.length ? `
+    <div class="suggest">
+      <h3>${sg.rides.length} payments look like rides</h3>
+      <p class="why">Each went to a handle you paid <strong>only once</strong>, for
+        ${INR(sg.band.low)}–${INR(sg.band.high)} —
+        ${sg.band.learned ? 'the range your own Rapido and Uber rides fall in' : 'a typical fare range'}.
+        That is the shape of paying a driver directly. Together they come to
+        <strong>${INR(sg.ridesTotal)}</strong>.</p>
+      <div class="suggest-actions">
+        <select id="ride-cat" aria-label="Category for these payments">${catOptions('Transport')}</select>
+        <button class="btn btn-primary" id="btn-apply-rides">Apply to all ${sg.rides.length}</button>
+      </div>
+      <div class="suggest-peek">
+        ${sg.rides.slice(0, 12).map(t => `<span class="peek">${esc((t.date || '').slice(5))} · ${INR(t.amount)}</span>`).join('')}
+        ${sg.rides.length > 12 ? `<span class="peek-more">+ ${sg.rides.length - 12} more</span>` : ''}
+      </div>
+    </div>` : '';
+
+  const groupsBlock = sg.groups.length ? `
+    <section class="panel">
+      <h2>Places you go back to <span class="count">${sg.groups.length}</span></h2>
+      <p class="note" style="margin:0 0 14px">You have paid each of these more than once, so they are somewhere
+        rather than someone one-off. Set a category and it applies to every payment to that payee, past and future.</p>
+      <div class="table-wrap"><table>
+        <thead><tr><th>Payee</th><th class="num">Times</th><th class="num">Average</th><th class="num">Total</th><th>Category</th></tr></thead>
+        <tbody>${sg.groups.map((g, i) => `<tr>
+          <td class="merchant">${esc(g.merchant || 'Unknown')}</td>
+          <td class="num mono">${g.count}</td>
+          <td class="num mono dim">${INR(g.avg)}</td>
+          <td class="num mono">${INR(g.total)}</td>
+          <td><select class="group-cat" data-group="${i}" aria-label="Category for ${esc(g.merchant || 'payee')}">
+            <option value="">— pick —</option>${catOptions(null)}</select></td>
+        </tr>`).join('')}</tbody>
+      </table></div>
+    </section>` : '';
+
+  const leftover = misc.length - sg.rides.length - sg.groups.reduce((a, g) => a + g.count, 0);
+  return `
+    <section class="panel">
+      <h2>Unlabelled <span class="count">${misc.length}</span></h2>
+      <p class="note" style="margin:0 0 16px">${INR(misc.reduce((a, t) => a + t.amount, 0))} across ${misc.length} payments has no category.
+        Nothing here is guessed for you — these are patterns with their reasoning shown, so you can check before accepting.</p>
+      ${ridesBlock}
+    </section>
+    ${groupsBlock}
+    ${leftover > 0 ? `<p class="note">${leftover} other payments do not fit either pattern — categorize those on the Month tab.</p>` : ''}`;
+}
+
+async function applyToMany(txnList, category, learnFrom) {
+  const ids = new Set(txnList.map(t => t.id));
+  let n = 0;
+  for (const t of State.txns) {
+    if (!ids.has(t.id)) continue;
+    t.category = category; t.categorySource = 'user'; n++;
+  }
+  // A one-off payee teaches us nothing for next time; a repeat payee does.
+  if (learnFrom) State.rules = learnRule(State.rules, learnFrom, category);
+  await persist();
+  render();
+  toast(`${n} payment${n === 1 ? '' : 's'} moved to ${category}.`);
+}
+
 function reviewPanel() {
   if (!State.review.length) return '';
   return `<section class="panel panel-review">
@@ -636,6 +720,22 @@ function wireView() {
   for (const b of document.querySelectorAll('[data-review-drop]')) {
     b.addEventListener('click', () => dropReview(+b.dataset.reviewDrop));
   }
+  const applyRides = el('btn-apply-rides');
+  if (applyRides) {
+    applyRides.addEventListener('click', () => {
+      const sg = suggestCategories(State.txns);
+      applyToMany(sg.rides, el('ride-cat').value, null);
+    });
+  }
+  for (const sel of document.querySelectorAll('.group-cat')) {
+    sel.addEventListener('change', e => {
+      if (!e.target.value) return;
+      const sg = suggestCategories(State.txns);
+      const g = sg.groups[Number(e.target.dataset.group)];
+      if (g) applyToMany(g.txns, e.target.value, g.merchant);
+    });
+  }
+
   const tip = el('tip');
   for (const c of document.querySelectorAll('.col')) {
     c.addEventListener('pointerenter', e => {
@@ -726,7 +826,7 @@ el('btn-parse').addEventListener('click', () => importText(el('paste-box').value
 el('btn-export').addEventListener('click', exportCsv);
 el('btn-clear').addEventListener('click', clearAll);
 el('month-select').addEventListener('change', e => { State.month = e.target.value; render(); });
-for (const t of ['month', 'trends']) {
+for (const t of ['month', 'trends', 'tidy']) {
   el(`tab-${t}`).addEventListener('click', () => { State.tab = t; render(); });
 }
 el('file-input').addEventListener('change', async e => {

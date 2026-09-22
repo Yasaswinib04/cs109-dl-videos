@@ -42,6 +42,28 @@ for. When both sources describe the same payment, the statement wins — see
 date + amount + account, because one source may know a reference the other does
 not. A category you corrected by hand survives the replacement.
 
+## The long tail nothing can name
+
+Roughly half the rows in a real statement are payments to a person's own UPI
+handle with no note — a ride paid straight to the driver, the shop on the
+corner. No rule table reaches those, and a learned rule is useless for rides
+because the payee is a different driver every time. (By value it is far less
+alarming than by count: in the statement this was built against, 51% of rows but
+15% of value.)
+
+What *is* learnable is the shape, so `suggestCategories()` surfaces two patterns
+with their evidence attached:
+
+- **Paid once, small amount** → likely a ride. The amount band is derived from
+  the user's own labelled Rapido/Uber transactions rather than a number picked in
+  advance, so it fits how they actually travel.
+- **Paid several times** → somewhere they go back to, so one decision settles
+  every row for that payee, and the rule sticks.
+
+These are proposals, never silent assignments. A wrong category nobody watched
+being applied is worse than an honest "Miscellaneous", because it corrupts the
+totals invisibly.
+
 ## One brand, one name
 
 A single statement spells one merchant many ways — Zepto alone appears as

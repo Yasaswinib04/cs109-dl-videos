@@ -150,7 +150,7 @@ export function monthOf(t) {
 }
 
 /** Categories that move money without consuming it. */
-const NON_SPEND = new Set(['Transfers', 'Investments']);
+const NON_SPEND = new Set(['Transfers', 'Investment']);
 
 export function summarizeMonth(txns, month) {
   const inMonth = txns.filter(t => monthOf(t) === month && !t.netted);
@@ -162,7 +162,7 @@ export function summarizeMonth(txns, month) {
   const spendTxns = debits.filter(t => !NON_SPEND.has(t.category));
   const income = sum(credits.filter(t => t.category === 'Income'));
   const spend = sum(spendTxns);
-  const invested = sum(debits.filter(t => t.category === 'Investments'));
+  const invested = sum(debits.filter(t => t.category === 'Investment'));
   const transfers = sum(debits.filter(t => t.category === 'Transfers'));
 
   const group = (arr, keyFn) => {
@@ -228,6 +228,75 @@ export function detectRecurring(txns) {
     });
   }
   return recurring.sort((a, b) => b.annualized - a.annualized);
+}
+
+/**
+ * Propose categories for the long tail the rule table cannot reach.
+ *
+ * Most unlabelled rows are payments to a person's own UPI handle with no note -
+ * a ride paid straight to the driver, or the shop on the corner. No rule table
+ * can name those, and a learned rule is useless for rides because the payee is
+ * a different driver every time. What IS learnable is the shape:
+ *
+ *   - A payee seen ONCE, for a small amount in the range your known rides
+ *     actually fall in, is very likely a ride.
+ *   - A payee seen SEVERAL times for small amounts is somewhere you go back to -
+ *     a regular shop - so one decision should settle all of its rows.
+ *
+ * These are suggestions with their evidence attached, never silent assignments:
+ * a wrong category that nobody saw being applied is worse than an honest
+ * "Miscellaneous", because it corrupts the totals invisibly.
+ *
+ * The ride band is derived from the user's OWN labelled rides where there are
+ * enough of them, rather than a number picked in advance.
+ */
+export function suggestCategories(txns) {
+  const spendable = txns.filter(t => t.direction === 'debit' && !t.netted);
+  const unknown = spendable.filter(t => t.category === 'Miscellaneous');
+  if (!unknown.length) return { rides: [], groups: [], band: null };
+
+  const rideAmounts = spendable
+    .filter(t => /^(uber|rapido|ola)$/i.test(t.merchant || ''))
+    .map(t => t.amount).sort((a, b) => a - b);
+
+  const at = q => rideAmounts[Math.floor(rideAmounts.length * q)];
+  const band = rideAmounts.length >= 10
+    ? { low: Math.max(20, Math.round(at(0.1) * 0.6)), high: Math.round(at(0.9) * 1.6), learned: true }
+    : { low: 30, high: 400, learned: false };
+
+  const seen = new Map();
+  for (const t of spendable) {
+    const k = normKey(t.merchant);
+    if (!k) continue;
+    seen.set(k, (seen.get(k) || 0) + 1);
+  }
+
+  const rides = [];
+  const groupMap = new Map();
+  for (const t of unknown) {
+    const k = normKey(t.merchant);
+    const count = seen.get(k) || 1;
+    if (count === 1 && t.amount >= band.low && t.amount <= band.high) {
+      rides.push(t);
+    } else if (count >= 2) {
+      if (!groupMap.has(k)) groupMap.set(k, { key: k, merchant: t.merchant, txns: [] });
+      groupMap.get(k).txns.push(t);
+    }
+  }
+
+  const groups = [...groupMap.values()].map(g => ({
+    ...g,
+    count: g.txns.length,
+    total: Math.round(g.txns.reduce((a, t) => a + t.amount, 0) * 100) / 100,
+    avg: Math.round((g.txns.reduce((a, t) => a + t.amount, 0) / g.txns.length) * 100) / 100,
+  })).sort((a, b) => b.total - a.total);
+
+  return {
+    band,
+    rides: rides.sort((a, b) => (a.date || '').localeCompare(b.date || '')),
+    ridesTotal: Math.round(rides.reduce((a, t) => a + t.amount, 0) * 100) / 100,
+    groups,
+  };
 }
 
 export function listMonths(txns) {
