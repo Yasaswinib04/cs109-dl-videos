@@ -269,6 +269,9 @@ function parseUpiSegments(segments, knownMerchants) {
     channel: 'upi',
     ref: /^\d{9,18}$/.test(rrn) ? rrn : null,
     vpa: vpaRaw.includes('@') ? vpaRaw : null,
+    // Kept even when truncated past the "@": the handle's PREFIX is what tells
+    // a shop's QR code from a person's own UPI id.
+    handle: vpaRaw || null,
     payee: payee || null,
   };
 }
@@ -337,6 +340,7 @@ export function rowsToTransactions(rows, layout, opts = {}) {
       merchant: toSelf ? 'Transfer to own account' : (parsed.merchant || (parsed.channel === 'atm' ? 'Cash withdrawal' : null)),
       selfTransfer: toSelf,
       channel: parsed.channel,
+      handle: parsed.handle || null,
       ref: (map.ref !== undefined && String(row[map.ref] || '').trim()) || parsed.ref || null,
       balance,
       issuer,

@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { parseMessage, splitMessages } from '../src/parse.js';
-import { buildLedger, summarizeMonth, detectRecurring, dedupeKey } from '../src/normalize.js';
+import { buildLedger, summarizeMonth, detectRecurring, dedupeKey, suggestCategories, isMerchantQr } from '../src/normalize.js';
 
 const parseAll = msgs => msgs.map(m => parseMessage(m));
 
@@ -170,4 +170,33 @@ test('a refund is categorized as what it refunds, not as shopping', () => {
     raw: 'UPI/ZEPTO MARK/zeptomarketpla/Refund for/HDFC BANK/103383440119/HDF/',
   }]);
   assert.equal(led.txns[0].category, 'Groceries', 'a grocery refund is groceries');
+});
+
+test('a shop QR code is never suggested as a ride', () => {
+  const mk = (merchant, handle, amount, day) => ({
+    kind: 'txn', source: 'statement', date: `2026-07-${String(day).padStart(2, '0')}`,
+    amount, direction: 'debit', merchant, handle, category: 'Miscellaneous',
+    confidence: 0.9, raw: `UPI/${merchant}/${handle}/UPI/BANK/${day}00000000/X/`,
+  });
+  const txns = [
+    // Enough labelled rides to learn the band from.
+    ...Array.from({ length: 12 }, (_, i) =>
+      ({ ...mk('Rapido', `r${i}@ybl`, 100 + i * 10, i + 1), category: 'Transport' })),
+    mk('SATHISHKUM', 'q337301468@ybl', 80, 20),   // PhonePe business QR
+    mk('paytm.d8005611', 'paytm.d8005611', 300, 21), // Paytm merchant
+    mk('Nirmal Kum', 'nn5099428@oksb', 68, 22),   // personal GPay
+  ];
+  const sg = suggestCategories(txns);
+  assert.equal(sg.band.learned, true, 'the band comes from the real rides');
+  assert.deepEqual(sg.counters.map(t => t.merchant), ['SATHISHKUM', 'paytm.d8005611']);
+  assert.deepEqual(sg.rides.map(t => t.merchant), ['Nirmal Kum']);
+});
+
+test('merchant QR prefixes are recognised, personal handles are not', () => {
+  assert.equal(isMerchantQr('paytmqr64iphu@'), true);
+  assert.equal(isMerchantQr('paytm.s138tko@'), true);
+  assert.equal(isMerchantQr('q337301468@ybl'), true, 'PhonePe business QR');
+  assert.equal(isMerchantQr('nn5099428@oksb'), false, 'personal Google Pay');
+  assert.equal(isMerchantQr('9843515229@okb'), false, 'a phone number is a person');
+  assert.equal(isMerchantQr(''), false);
 });

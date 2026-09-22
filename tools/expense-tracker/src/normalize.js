@@ -272,12 +272,15 @@ export function suggestCategories(txns) {
   }
 
   const rides = [];
+  const counters = [];
   const groupMap = new Map();
   for (const t of unknown) {
     const k = normKey(t.merchant);
     const count = seen.get(k) || 1;
     if (count === 1 && t.amount >= band.low && t.amount <= band.high) {
-      rides.push(t);
+      // A payment to a shop's QR code is not a ride, whatever its size. Drivers
+      // are paid to a personal UPI id; a counter has a merchant terminal.
+      (isMerchantQr(t.handle) ? counters : rides).push(t);
     } else if (count >= 2) {
       if (!groupMap.has(k)) groupMap.set(k, { key: k, merchant: t.merchant, txns: [] });
       groupMap.get(k).txns.push(t);
@@ -291,12 +294,33 @@ export function suggestCategories(txns) {
     avg: Math.round((g.txns.reduce((a, t) => a + t.amount, 0) / g.txns.length) * 100) / 100,
   })).sort((a, b) => b.total - a.total);
 
+  const byDate = (a, b) => (a.date || '').localeCompare(b.date || '');
+  const total = list => Math.round(list.reduce((a, t) => a + t.amount, 0) * 100) / 100;
+
   return {
     band,
-    rides: rides.sort((a, b) => (a.date || '').localeCompare(b.date || '')),
-    ridesTotal: Math.round(rides.reduce((a, t) => a + t.amount, 0) * 100) / 100,
+    rides: rides.sort(byDate),
+    ridesTotal: total(rides),
+    counters: counters.sort(byDate),
+    countersTotal: total(counters),
     groups,
   };
+}
+
+/**
+ * Is this UPI handle a merchant's payment terminal rather than a person?
+ *
+ * Aggregator QR codes are recognisable by their prefix: Paytm issues
+ * "paytmqr…" and "paytm.s…/paytm.d…", PhonePe's business codes are "q" plus a
+ * long number. These belong to a shop or restaurant counter. It is a
+ * one-directional signal - it says "not a driver", never "is a driver", since
+ * real rides here were paid across some thirty different handle domains.
+ */
+export function isMerchantQr(handle) {
+  const h = String(handle || '').toLowerCase();
+  if (!h) return false;
+  return /^(paytmqr|paytm[.\-]|q\d{6,}|bharatpe|pinelabs|razorpay|rzp|ezetap|mswipe)/.test(h)
+    || /\.payu\b/.test(h);
 }
 
 export function listMonths(txns) {

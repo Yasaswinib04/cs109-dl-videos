@@ -175,6 +175,7 @@ textarea { width:100%; min-height:170px; background:var(--sunk); border:1px soli
   font-family:var(--mono); font-size:9.5px; padding:1px 5px; border-radius:20px; vertical-align:1px; }
 .suggest { border:1px solid color-mix(in srgb, var(--accent) 30%, var(--line)); background:var(--accent-soft);
   border-radius:var(--r); padding:18px 20px; margin-bottom:14px; }
+.suggest-alt { background:var(--surface-2); border-color:var(--line); }
 .suggest h3 { font-size:15px; margin:0 0 5px; font-weight:600; }
 .suggest .why { font-size:13px; color:var(--ink-2); margin-bottom:14px; }
 .suggest-actions { display:flex; flex-wrap:wrap; gap:10px; align-items:center; }
@@ -1028,6 +1029,9 @@ function parseUpiSegments(segments, knownMerchants) {
     channel: 'upi',
     ref: /^\d{9,18}$/.test(rrn) ? rrn : null,
     vpa: vpaRaw.includes('@') ? vpaRaw : null,
+    // Kept even when truncated past the "@": the handle's PREFIX is what tells
+    // a shop's QR code from a person's own UPI id.
+    handle: vpaRaw || null,
     payee: payee || null,
   };
 }
@@ -1096,6 +1100,7 @@ function rowsToTransactions(rows, layout, opts = {}) {
       merchant: toSelf ? 'Transfer to own account' : (parsed.merchant || (parsed.channel === 'atm' ? 'Cash withdrawal' : null)),
       selfTransfer: toSelf,
       channel: parsed.channel,
+      handle: parsed.handle || null,
       ref: (map.ref !== undefined && String(row[map.ref] || '').trim()) || parsed.ref || null,
       balance,
       issuer,
@@ -1459,12 +1464,15 @@ function suggestCategories(txns) {
   }
 
   const rides = [];
+  const counters = [];
   const groupMap = new Map();
   for (const t of unknown) {
     const k = normKey(t.merchant);
     const count = seen.get(k) || 1;
     if (count === 1 && t.amount >= band.low && t.amount <= band.high) {
-      rides.push(t);
+      // A payment to a shop's QR code is not a ride, whatever its size. Drivers
+      // are paid to a personal UPI id; a counter has a merchant terminal.
+      (isMerchantQr(t.handle) ? counters : rides).push(t);
     } else if (count >= 2) {
       if (!groupMap.has(k)) groupMap.set(k, { key: k, merchant: t.merchant, txns: [] });
       groupMap.get(k).txns.push(t);
@@ -1478,12 +1486,33 @@ function suggestCategories(txns) {
     avg: Math.round((g.txns.reduce((a, t) => a + t.amount, 0) / g.txns.length) * 100) / 100,
   })).sort((a, b) => b.total - a.total);
 
+  const byDate = (a, b) => (a.date || '').localeCompare(b.date || '');
+  const total = list => Math.round(list.reduce((a, t) => a + t.amount, 0) * 100) / 100;
+
   return {
     band,
-    rides: rides.sort((a, b) => (a.date || '').localeCompare(b.date || '')),
-    ridesTotal: Math.round(rides.reduce((a, t) => a + t.amount, 0) * 100) / 100,
+    rides: rides.sort(byDate),
+    ridesTotal: total(rides),
+    counters: counters.sort(byDate),
+    countersTotal: total(counters),
     groups,
   };
+}
+
+/**
+ * Is this UPI handle a merchant's payment terminal rather than a person?
+ *
+ * Aggregator QR codes are recognisable by their prefix: Paytm issues
+ * "paytmqr…" and "paytm.s…/paytm.d…", PhonePe's business codes are "q" plus a
+ * long number. These belong to a shop or restaurant counter. It is a
+ * one-directional signal - it says "not a driver", never "is a driver", since
+ * real rides here were paid across some thirty different handle domains.
+ */
+function isMerchantQr(handle) {
+  const h = String(handle || '').toLowerCase();
+  if (!h) return false;
+  return /^(paytmqr|paytm[.\-]|q\d{6,}|bharatpe|pinelabs|razorpay|rzp|ezetap|mswipe)/.test(h)
+    || /\.payu\b/.test(h);
 }
 
 function listMonths(txns) {
@@ -2157,13 +2186,30 @@ function tidyView() {
       </table></div>
     </section>` : '';
 
-  const leftover = misc.length - sg.rides.length - sg.groups.reduce((a, g) => a + g.count, 0);
+  const countersBlock = sg.counters.length ? `
+    <div class="suggest suggest-alt">
+      <h3>${sg.counters.length} payments were made at a shop counter</h3>
+      <p class="why">These went to a merchant QR code — a Paytm or PhonePe business terminal — rather than
+        to someone's own UPI id, so they are somewhere you paid in person, not a ride.
+        Together <strong>${INR(sg.countersTotal)}</strong>. Most will be eating out or a small shop.</p>
+      <div class="suggest-actions">
+        <select id="counter-cat" aria-label="Category for these payments">${catOptions('Eat out')}</select>
+        <button class="btn btn-primary" id="btn-apply-counters">Apply to all ${sg.counters.length}</button>
+      </div>
+      <div class="suggest-peek">
+        ${sg.counters.slice(0, 12).map(t => `<span class="peek">${esc((t.date || '').slice(5))} · ${INR(t.amount)}</span>`).join('')}
+        ${sg.counters.length > 12 ? `<span class="peek-more">+ ${sg.counters.length - 12} more</span>` : ''}
+      </div>
+    </div>` : '';
+
+  const leftover = misc.length - sg.rides.length - sg.counters.length - sg.groups.reduce((a, g) => a + g.count, 0);
   return `
     <section class="panel">
       <h2>Unlabelled <span class="count">${misc.length}</span></h2>
       <p class="note" style="margin:0 0 16px">${INR(misc.reduce((a, t) => a + t.amount, 0))} across ${misc.length} payments has no category.
         Nothing here is guessed for you — these are patterns with their reasoning shown, so you can check before accepting.</p>
       ${ridesBlock}
+      ${countersBlock}
     </section>
     ${groupsBlock}
     ${leftover > 0 ? `<p class="note">${leftover} other payments do not fit either pattern — categorize those on the Month tab.</p>` : ''}`;
@@ -2213,6 +2259,12 @@ function wireView() {
   }
   for (const b of document.querySelectorAll('[data-review-drop]')) {
     b.addEventListener('click', () => dropReview(+b.dataset.reviewDrop));
+  }
+  const applyCounters = el('btn-apply-counters');
+  if (applyCounters) {
+    applyCounters.addEventListener('click', () => {
+      applyToMany(suggestCategories(State.txns).counters, el('counter-cat').value, null);
+    });
   }
   const applyRides = el('btn-apply-rides');
   if (applyRides) {

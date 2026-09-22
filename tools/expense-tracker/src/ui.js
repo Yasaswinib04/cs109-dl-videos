@@ -663,13 +663,30 @@ function tidyView() {
       </table></div>
     </section>` : '';
 
-  const leftover = misc.length - sg.rides.length - sg.groups.reduce((a, g) => a + g.count, 0);
+  const countersBlock = sg.counters.length ? `
+    <div class="suggest suggest-alt">
+      <h3>${sg.counters.length} payments were made at a shop counter</h3>
+      <p class="why">These went to a merchant QR code — a Paytm or PhonePe business terminal — rather than
+        to someone's own UPI id, so they are somewhere you paid in person, not a ride.
+        Together <strong>${INR(sg.countersTotal)}</strong>. Most will be eating out or a small shop.</p>
+      <div class="suggest-actions">
+        <select id="counter-cat" aria-label="Category for these payments">${catOptions('Eat out')}</select>
+        <button class="btn btn-primary" id="btn-apply-counters">Apply to all ${sg.counters.length}</button>
+      </div>
+      <div class="suggest-peek">
+        ${sg.counters.slice(0, 12).map(t => `<span class="peek">${esc((t.date || '').slice(5))} · ${INR(t.amount)}</span>`).join('')}
+        ${sg.counters.length > 12 ? `<span class="peek-more">+ ${sg.counters.length - 12} more</span>` : ''}
+      </div>
+    </div>` : '';
+
+  const leftover = misc.length - sg.rides.length - sg.counters.length - sg.groups.reduce((a, g) => a + g.count, 0);
   return `
     <section class="panel">
       <h2>Unlabelled <span class="count">${misc.length}</span></h2>
       <p class="note" style="margin:0 0 16px">${INR(misc.reduce((a, t) => a + t.amount, 0))} across ${misc.length} payments has no category.
         Nothing here is guessed for you — these are patterns with their reasoning shown, so you can check before accepting.</p>
       ${ridesBlock}
+      ${countersBlock}
     </section>
     ${groupsBlock}
     ${leftover > 0 ? `<p class="note">${leftover} other payments do not fit either pattern — categorize those on the Month tab.</p>` : ''}`;
@@ -719,6 +736,12 @@ function wireView() {
   }
   for (const b of document.querySelectorAll('[data-review-drop]')) {
     b.addEventListener('click', () => dropReview(+b.dataset.reviewDrop));
+  }
+  const applyCounters = el('btn-apply-counters');
+  if (applyCounters) {
+    applyCounters.addEventListener('click', () => {
+      applyToMany(suggestCategories(State.txns).counters, el('counter-cat').value, null);
+    });
   }
   const applyRides = el('btn-apply-rides');
   if (applyRides) {
