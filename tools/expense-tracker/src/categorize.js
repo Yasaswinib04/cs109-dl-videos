@@ -21,7 +21,7 @@ export const CATEGORIES = [
 const SEED_RULES = [
   // Money moving between your own pockets has to win over everything else,
   // or a card-bill payment gets counted as a second purchase.
-  ['Transfers',        ['transfer to own account','self transfer','cred ','cred.club','cred club','dreamplug','credit card payment','cc payment','card payment','credit card bill','billdesk','own account']],
+  ['Transfers',        ['transfer to own account','self transfer','amicafinancial','amica financial','jupiterupicoll','cred ','cred.club','cred club','dreamplug','credit card payment','cc payment','card payment','credit card bill','billdesk','own account']],
   ['Taxes',            ['directtax','direct tax','income tax','incometax','itns','advance tax','self assessment','tds ','gst pay','property tax']],
   ['Investment',       ['investment','zerodha','groww','upstox','angel one','angelone','icici direct','hdfc securities','kuvera','smallcase','indmoney','paytm money','mutual fund','sip ','nps ','ppf','elss','nippon','mirae','parag parikh','quant mf','gold bond','sgb','coin dcx','coindcx']],
   ['Rent',             ['rent','landlord','nobroker','maintenance','society','pg ','hostel']],
@@ -104,6 +104,7 @@ const BRANDS = [
   ['Zepto',            ['zepto', 'zptmktp']],
   ['Blinkit',          ['blinkit', 'grofers']],
   ['BigBasket',        ['bigbasket', 'bbdaily']],
+  ['Jupiter card bill',['amicafinancial', 'amica financial', 'jupiterupicoll']],
   ['CRED Telecom',     ['cred.telecom', 'cred telecom']],
   ['CRED',             ['cred.club', 'cred club', 'dreamplug']],
   ['Uber',             ['uber']],

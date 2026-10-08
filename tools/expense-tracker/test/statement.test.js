@@ -4,7 +4,7 @@ import {
   parseCsv, detectLayout, rowsToTransactions, checkBalanceContinuity,
   parseNarration, cellToAmount, cellToDate,
 } from '../src/statement.js';
-import { SEED_NEEDLES, categorize } from '../src/categorize.js';
+import { SEED_NEEDLES, categorize, canonicalMerchant } from '../src/categorize.js';
 import { buildLedger, summarizeMonth } from '../src/normalize.js';
 import { parseMessage } from '../src/parse.js';
 
@@ -245,4 +245,13 @@ test('astrology apps resolve, but "astro" alone never matches a hospital', () =>
   // The reason there is no bare "astro" needle.
   assert.equal(cat('gastroenterology clinic'), 'Health');
   assert.equal(cat('Amaha Health'), 'Health');
+});
+
+test('Jupiter card bill payments are transfers, not spending', () => {
+  // Jupiter's Edge CSB card is operated by Amica Financial Technologies, so the
+  // bank statement names the payee "amicafinancial" - unrecognisable as a card bill.
+  for (const m of ['amicafinancial', 'jupiterupicoll']) {
+    assert.equal(categorize({ merchant: m, direction: 'debit', raw: '' }).category, 'Transfers');
+    assert.equal(canonicalMerchant(m, ''), 'Jupiter card bill');
+  }
 });
