@@ -193,8 +193,6 @@ textarea { width:100%; min-height:170px; background:var(--sunk); border:1px soli
 .acct-row { display:flex; flex-wrap:wrap; gap:10px; align-items:flex-end; margin-bottom:6px; }
 .acct-row label { display:flex; flex-direction:column; gap:4px; font-family:var(--mono); font-size:10px;
   letter-spacing:.08em; text-transform:uppercase; color:var(--muted); }
-.w-in { background:var(--surface-2); border:1px solid var(--line); border-radius:6px; padding:5px 8px; font-size:13px; width:100%; min-width:90px; }
-input.w-in.num { text-align:right; font-family:var(--mono); }
 .acct-row input { background:var(--surface-2); border:1px solid var(--line); border-radius:6px;
   padding:6px 9px; font-size:13px; width:170px; }
 .check { border-radius:8px; padding:12px 14px; font-size:13px; margin:14px 0; border:1px solid; }
@@ -242,7 +240,6 @@ input.w-in.num { text-align:right; font-family:var(--mono); }
       <button class="tab" id="tab-month" role="tab" aria-selected="true">Month</button>
       <button class="tab" id="tab-trends" role="tab" aria-selected="false">Trends</button>
       <button class="tab" id="tab-tidy" role="tab" aria-selected="false">Tidy up<span class="tab-badge" id="tidy-count" hidden></span></button>
-      <button class="tab" id="tab-wealth" role="tab" aria-selected="false">Wealth</button>
     </div>
     <select id="month-select" aria-label="Month to show"></select>
     <button class="btn btn-primary" id="btn-import">Import</button>
@@ -260,7 +257,7 @@ input.w-in.num { text-align:right; font-family:var(--mono); }
   <p class="note" style="display:flex;gap:14px;flex-wrap:wrap;align-items:center;">
     <button class="btn btn-sm" id="btn-export">Export CSV</button>
     <button class="btn btn-sm btn-ghost" id="btn-clear">Delete all data</button>
-    <span>Your statements are read on this page and stored with it. Nothing is sent anywhere else.</span>
+    <span>Your messages are parsed on this page and stored with it. Nothing is sent anywhere else.</span>
   </p>
 </div>
 
@@ -1537,119 +1534,6 @@ function listMonths(txns) {
 }
 
 
-/* ---- src/wealth.js ---- */
-/**
- * wealth.js - net worth from what is actually knowable.
- *
- * The hard truth this module is shaped around: no statement anyone can export
- * says what an investment is WORTH. A broker's fund ledger records cash crossing
- * the account, a bank statement records the bank, a card statement records the
- * card. Current value lives only in an app screen or a consolidated account
- * statement. So the design splits holdings into two kinds:
- *
- *   DERIVED  - taken from imported statements, never typed, always current.
- *              A bank balance is the closing balance of its latest row.
- *   ENTERED  - a number the owner reads off a screen once a month.
- *
- * Marking which is which matters: a derived figure can be trusted to the paisa,
- * an entered one is as fresh as the day it was typed, and a net worth that mixes
- * them silently invites more confidence than it has earned.
- */
-
-const ASSET_KINDS = ['Bank', 'Investment', 'Cash', 'Property', 'Other asset'];
-const DEBT_KINDS = ['Credit card', 'Loan', 'Other debt'];
-const ALL_KINDS = [...ASSET_KINDS, ...DEBT_KINDS];
-
-const isDebt = kind => DEBT_KINDS.includes(kind);
-
-/**
- * Closing balance per account, read from the most recent statement row that
- * carried one. Statements list same-day rows out of order, so the latest row is
- * the one with the newest date, breaking ties by position in the file.
- */
-function deriveBankBalances(txns) {
-  const latest = new Map();
-  txns.forEach((t, i) => {
-    if (typeof t.balance !== 'number' || !Number.isFinite(t.balance)) return;
-    if (t.accountType === 'card') return;          // a card's "balance" is debt, not an asset
-    const key = `${t.issuer || 'Account'}${t.account ? ' ••' + t.account : ''}`;
-    const prev = latest.get(key);
-    const stamp = `${t.date || ''}|${String(i).padStart(6, '0')}`;
-    if (!prev || stamp > prev.stamp) latest.set(key, { stamp, balance: t.balance, date: t.date });
-  });
-  return [...latest.entries()].map(([name, v]) => ({
-    id: `auto:${name}`,
-    name,
-    kind: 'Bank',
-    value: Math.round(v.balance * 100) / 100,
-    asOf: v.date,
-    derived: true,
-  })).sort((a, b) => b.value - a.value);
-}
-
-/** Investment cost basis from transactions already categorised as Investment. */
-function investedFromLedger(txns) {
-  const out = txns.filter(t => t.direction === 'debit' && t.category === 'Investment' && !t.netted);
-  const back = txns.filter(t => t.direction === 'credit' && t.category === 'Investment' && !t.netted);
-  const sum = a => Math.round(a.reduce((x, t) => x + t.amount, 0) * 100) / 100;
-  return { paidIn: sum(out), takenOut: sum(back), net: Math.round((sum(out) - sum(back)) * 100) / 100 };
-}
-
-/**
- * @param {object[]} derived  rows from deriveBankBalances
- * @param {object[]} entered  rows the owner typed
- */
-function summarizeWealth(derived, entered) {
-  const rows = [...derived, ...entered].filter(r => Number.isFinite(Number(r.value)));
-  const assets = rows.filter(r => !isDebt(r.kind));
-  const debts = rows.filter(r => isDebt(r.kind));
-  const sum = a => Math.round(a.reduce((x, r) => x + Math.abs(Number(r.value) || 0), 0) * 100) / 100;
-
-  const invested = rows.filter(r => r.kind === 'Investment');
-  const withCost = invested.filter(r => Number.isFinite(Number(r.cost)) && Number(r.cost) > 0);
-  const costTotal = sum(withCost.map(r => ({ value: r.cost })));
-  const valueTotal = sum(withCost);
-
-  return {
-    assets: sum(assets),
-    debts: sum(debts),
-    netWorth: Math.round((sum(assets) - sum(debts)) * 100) / 100,
-    rows,
-    // How much of the figure is a typed number rather than a read one.
-    enteredShare: rows.length ? Math.round((sum(entered) / Math.max(sum(rows), 1)) * 100) : 0,
-    gain: withCost.length ? Math.round((valueTotal - costTotal) * 100) / 100 : null,
-    gainPct: withCost.length && costTotal ? Math.round(((valueTotal - costTotal) / costTotal) * 1000) / 10 : null,
-    costTotal, valueTotal,
-    staleRows: entered.filter(r => r.asOf && monthsOld(r.asOf) >= 2),
-  };
-}
-
-function monthsOld(iso) {
-  const then = Date.parse(iso);
-  if (!Number.isFinite(then)) return 0;
-  return Math.floor((Date.now() - then) / (30 * 864e5));
-}
-
-/** Freeze this month's figure so a trend exists later. */
-function takeSnapshot(snapshots, summary, month) {
-  return {
-    ...snapshots,
-    [month]: {
-      netWorth: summary.netWorth,
-      assets: summary.assets,
-      debts: summary.debts,
-      takenAt: new Date().toISOString(),
-    },
-  };
-}
-
-function snapshotSeries(snapshots) {
-  return Object.entries(snapshots || {})
-    .map(([month, s]) => ({ month, ...s }))
-    .sort((a, b) => a.month.localeCompare(b.month));
-}
-
-
 /* ---- src/ui.js ---- */
 /* ui.js - the tracker interface. Depends on parse/categorize/normalize, which the
    build inlines above this file. */
@@ -1675,7 +1559,6 @@ const State = {
   sample: false,
   store: null,
   pending: null,
-  wealth: { items: [], snapshots: {} },
   lastImport: null,
 };
 
@@ -1699,10 +1582,8 @@ function makeStore(db) {
     return {
       kind: 'local',
       async load() {
-        try {
-          const d = JSON.parse(localStorage.getItem(LS_KEY) || 'null') || {};
-          return { months: d.months || {}, rules: d.rules || {}, wealth: d.wealth || { items: [], snapshots: {} } };
-        } catch { return { months: {}, rules: {}, wealth: { items: [], snapshots: {} } }; }
+        try { return JSON.parse(localStorage.getItem(LS_KEY) || 'null') || { months: {}, rules: {} }; }
+        catch { return { months: {}, rules: {} }; }
       },
       async save(data) {
         try { localStorage.setItem(LS_KEY, JSON.stringify(data)); } catch { /* quota or blocked */ }
@@ -1712,25 +1593,16 @@ function makeStore(db) {
   return {
     kind: 'db',
     async load() {
-      const [monthsSnap, rulesSnap, wealthSnap] = await Promise.all([
+      const [monthsSnap, rulesSnap] = await Promise.all([
         db.collection('months').get(),
         db.doc('meta/rules').get(),
-        db.doc('meta/wealth').get(),
       ]);
       const months = {};
       for (const d of monthsSnap.docs) months[d.id] = (d.data() || {}).txns || [];
-      const w = wealthSnap.exists ? wealthSnap.data() : null;
-      return {
-        months,
-        rules: (rulesSnap.exists && rulesSnap.data().rules) || {},
-        wealth: { items: (w && w.items) || [], snapshots: (w && w.snapshots) || {} },
-      };
+      return { months, rules: (rulesSnap.exists && rulesSnap.data().rules) || {} };
     },
     async save(data, changedMonths) {
-      const jobs = [
-        db.doc('meta/rules').set({ rules: data.rules }),
-        db.doc('meta/wealth').set(data.wealth || { items: [], snapshots: {} }),
-      ];
+      const jobs = [db.doc('meta/rules').set({ rules: data.rules })];
       const months = changedMonths || Object.keys(data.months);
       for (const ym of months) {
         jobs.push(db.doc(`months/${ym}`).set({ txns: data.months[ym] || [], updatedAt: new Date().toISOString() }));
@@ -1755,16 +1627,8 @@ function bucketByMonth(txns) {
 }
 
 async function persist(changed) {
-  // Wealth figures are the owner's own and worth keeping even while the sample
-  // ledger is on screen - but the sample transactions themselves never are.
-  const showingSample = State.sample;
-  if (showingSample && !State.wealth.items.length) return;
-  const data = {
-    months: showingSample ? {} : bucketByMonth(State.txns.concat(State.review)),
-    rules: State.rules,
-    wealth: State.wealth,
-  };
-  if (showingSample) changed = [];
+  if (State.sample) return;  // sample data is never written to storage
+  const data = { months: bucketByMonth(State.txns.concat(State.review)), rules: State.rules };
   try { await State.store.save(data, changed); }
   catch (e) { toast('Could not save. Your changes are on screen but not stored.'); }
 }
@@ -2135,8 +1999,7 @@ function render() {
   if (!State.month || (!months.includes(State.month) && months.length)) State.month = months[0];
   renderHeader(months);
   el('view').innerHTML = State.tab === 'month' ? monthView()
-    : State.tab === 'trends' ? trendsView()
-    : State.tab === 'wealth' ? wealthView() : tidyView();
+    : State.tab === 'trends' ? trendsView() : tidyView();
   el('review-panel').innerHTML = reviewPanel();
   wireView();
 }
@@ -2147,7 +2010,7 @@ function renderHeader(months) {
     : `<option>No data yet</option>`;
   el('month-select').innerHTML = opts;
   el('month-select').disabled = !months.length;
-  for (const t of ['month', 'trends', 'tidy', 'wealth']) el(`tab-${t}`).setAttribute('aria-selected', String(State.tab === t));
+  for (const t of ['month', 'trends', 'tidy']) el(`tab-${t}`).setAttribute('aria-selected', String(State.tab === t));
   const unlabelled = State.txns.filter(t => t.direction === 'debit' && !t.netted && t.category === 'Miscellaneous').length;
   el('tidy-count').textContent = unlabelled;
   el('tidy-count').hidden = !unlabelled;
@@ -2283,136 +2146,6 @@ function catTrendTable(months) {
     }).join('')}</tr>`).join('')}</tbody></table></div>`;
 }
 
-/* ----------------------------------------------------------------- wealth */
-
-const today = () => new Date().toISOString().slice(0, 10);
-const thisMonth = () => new Date().toISOString().slice(0, 7);
-
-/**
- * Net worth from two kinds of number, kept visibly apart: balances derived from
- * imported statements, and values the owner reads off an app once a month. No
- * exportable file states what an investment is worth, so the typed half is
- * unavoidable - what is avoidable is pretending it is as fresh as the rest.
- */
-/** The headline block, kept separate so a single edited field can refresh it
- *  without re-rendering the inputs underneath and stealing focus. */
-function wealthHeadHtml(s, invested) {
-  return `
-  <section class="summary">
-    <div class="tile tile-lead">
-      <span class="tile-label">Net worth</span>
-      <span class="figure">${INR(s.netWorth)}</span>
-      <span class="tile-sub">${INR(s.assets)} held · ${INR(s.debts)} owed</span>
-    </div>
-    <div class="tile">
-      <span class="tile-label">Put into investments</span>
-      <span class="figure-sm">${INR(invested.net)}</span>
-      <span class="tile-sub">from transactions tagged Investment here</span>
-    </div>
-    <div class="tile">
-      <span class="tile-label">Gain on what you priced</span>
-      <span class="figure-sm ${s.gain !== null && s.gain < 0 ? 'is-negative' : ''}">${s.gain === null ? '—' : INR(s.gain)}</span>
-      <span class="tile-sub">${s.gain === null ? 'add a cost next to a value' : `${s.gainPct}% over ${INR(s.costTotal)}`}</span>
-    </div>
-    <div class="tile">
-      <span class="tile-label">Typed, not read</span>
-      <span class="figure-sm">${s.enteredShare}%</span>
-      <span class="tile-sub">${s.enteredShare > 50 ? 'most of this is as fresh as you last made it' : 'most comes from statements'}</span>
-    </div>
-  </section>
-
-  ${s.staleRows.length ? `<div class="check check-bad" style="margin-bottom:14px">
-    <strong>${s.staleRows.length} value${s.staleRows.length === 1 ? ' is' : 's are'} two months old or more</strong>
-    ${esc(s.staleRows.map(r => r.name).join(', '))} — net worth is only as current as these.</div>` : ''}`;
-}
-
-function wealthView() {
-  const derived = deriveBankBalances(State.txns);
-  const entered = State.wealth.items;
-  const s = summarizeWealth(derived, entered);
-  const invested = investedFromLedger(State.txns);
-  const series = snapshotSeries(State.wealth.snapshots);
-
-  const kindOptions = sel => ALL_KINDS.map(k => `<option${k === sel ? ' selected' : ''}>${k}</option>`).join('');
-
-  const rows = entered.map((it, i) => `
-    <tr>
-      <td><input class="w-in" data-i="${i}" data-f="name" value="${esc(it.name || '')}" placeholder="What is it"></td>
-      <td><select class="w-in" data-i="${i}" data-f="kind">${kindOptions(it.kind)}</select></td>
-      <td class="num"><input class="w-in num" data-i="${i}" data-f="value" type="number" step="0.01" value="${it.value ?? ''}"></td>
-      <td class="num"><input class="w-in num" data-i="${i}" data-f="cost" type="number" step="0.01" value="${it.cost ?? ''}" placeholder="—"></td>
-      <td class="mono dim">${esc(it.asOf || '')}</td>
-      <td><button class="btn btn-sm btn-ghost" data-w-del="${i}" aria-label="Remove ${esc(it.name || 'row')}">Remove</button></td>
-    </tr>`).join('');
-
-  const trend = series.length >= 2
-    ? columnChart(series.map(p => ({ label: monthLabel(p.month), short: monthLabel(p.month).slice(0, 3), value: Math.max(p.netWorth, 0) })))
-    : `<p class="empty">Save a snapshot each month and the trend appears here.</p>`;
-
-  return `
-  <div id="wealth-head">${wealthHeadHtml(s, invested)}</div>
-  <section class="panel">
-    <h2>From your statements <span class="count">${derived.length}</span></h2>
-    <p class="note" style="margin:0 0 14px">Closing balances taken straight from what you imported. These update themselves
-      on the next import — nothing to maintain.</p>
-    ${derived.length ? `<div class="table-wrap"><table>
-      <thead><tr><th>Account</th><th class="num">Balance</th><th>As of</th></tr></thead>
-      <tbody>${derived.map(d => `<tr>
-        <td class="merchant">${esc(d.name)}</td>
-        <td class="num mono">${INR(d.value, 2)}</td>
-        <td class="mono dim">${esc(d.asOf || '')}</td></tr>`).join('')}</tbody>
-    </table></div>` : `<p class="empty">Import a statement with a balance column and your accounts appear here.</p>`}
-  </section>
-
-  <section class="panel">
-    <h2>What you hold and owe <span class="count">${entered.length}</span></h2>
-    <p class="note" style="margin:0 0 14px">The part no file can tell us. Read the current value off Groww, INDmoney or your
-      card app and type it here — once a month is enough. Put what you paid in <strong>Cost</strong> and the gain works itself out.
-      Credit cards and loans count as money owed.</p>
-    ${entered.length ? `<div class="table-wrap"><table>
-      <thead><tr><th>Name</th><th>Kind</th><th class="num">Value today</th><th class="num">Cost</th><th>Updated</th><th></th></tr></thead>
-      <tbody>${rows}</tbody>
-    </table></div>` : `<p class="empty">Nothing added yet.</p>`}
-    <div class="drawer-actions">
-      <button class="btn btn-primary" id="btn-w-add">Add a holding</button>
-      ${invested.net > 0 && !entered.some(i => i.kind === 'Investment') ? `<button class="btn" id="btn-w-seed">Start one from your ${INR(invested.net)} of tagged investments</button>` : ''}
-    </div>
-  </section>
-
-  <section class="panel">
-    <h2>Net worth over time <span class="count">${series.length}</span></h2>
-    ${trend}
-    <div class="drawer-actions" style="margin-top:16px">
-      <button class="btn" id="btn-w-snap">Save ${esc(monthLabel(thisMonth()))} as a snapshot</button>
-      ${series.length ? `<span class="note" style="margin:0">Last saved ${esc(monthLabel(series[series.length - 1].month))}.</span>` : ''}
-    </div>
-  </section>`;
-}
-
-async function wealthEdit(i, field, raw) {
-  const item = State.wealth.items[i];
-  if (!item) return;
-  const next = { ...item };
-  if (field === 'value' || field === 'cost') {
-    const n = Number(raw);
-    next[field] = raw === '' ? undefined : (Number.isFinite(n) ? n : item[field]);
-  } else {
-    next[field] = raw;
-  }
-  // Any change to a figure restamps it, so staleness tracks reality.
-  if (field === 'value') next.asOf = today();
-  State.wealth.items = State.wealth.items.map((x, j) => (j === i ? next : x));
-  await persist();
-  refreshWealthHead();
-}
-
-function refreshWealthHead() {
-  const head = el('wealth-head');
-  if (!head) return;
-  const s = summarizeWealth(deriveBankBalances(State.txns), State.wealth.items);
-  head.innerHTML = wealthHeadHtml(s, investedFromLedger(State.txns));
-}
-
 /* ---------------------------------------------------------------- tidy up */
 
 /**
@@ -2541,36 +2274,6 @@ function wireView() {
   for (const b of document.querySelectorAll('[data-review-drop]')) {
     b.addEventListener('click', () => dropReview(+b.dataset.reviewDrop));
   }
-  for (const inp of document.querySelectorAll('.w-in')) {
-    inp.addEventListener('change', e => wealthEdit(Number(e.target.dataset.i), e.target.dataset.f, e.target.value));
-  }
-  for (const b of document.querySelectorAll('[data-w-del]')) {
-    b.addEventListener('click', async () => {
-      State.wealth.items = State.wealth.items.filter((_, j) => j !== Number(b.dataset.wDel));
-      await persist(); render();
-    });
-  }
-  const wAdd = el('btn-w-add');
-  if (wAdd) wAdd.addEventListener('click', async () => {
-    State.wealth.items = [...State.wealth.items, { name: '', kind: 'Investment', value: 0, asOf: today() }];
-    await persist(); render();
-  });
-  const wSeed = el('btn-w-seed');
-  if (wSeed) wSeed.addEventListener('click', async () => {
-    const inv = investedFromLedger(State.txns);
-    State.wealth.items = [...State.wealth.items,
-      { name: 'Investments', kind: 'Investment', value: inv.net, cost: inv.net, asOf: today() }];
-    await persist(); render();
-    toast('Added at cost. Replace the value with what it is worth today.');
-  });
-  const wSnap = el('btn-w-snap');
-  if (wSnap) wSnap.addEventListener('click', async () => {
-    const s = summarizeWealth(deriveBankBalances(State.txns), State.wealth.items);
-    State.wealth.snapshots = takeSnapshot(State.wealth.snapshots, s, thisMonth());
-    await persist(); render();
-    toast(`Saved ${monthLabel(thisMonth())} at ${INR(s.netWorth)}.`);
-  });
-
   const applyCounters = el('btn-apply-counters');
   if (applyCounters) {
     applyCounters.addEventListener('click', () => {
@@ -2665,7 +2368,6 @@ async function boot() {
   try { data = await State.store.load(); } catch { toast('Could not load saved data.'); }
 
   State.rules = data.rules || {};
-  State.wealth = data.wealth || { items: [], snapshots: {} };
   const stored = Object.values(data.months || {}).flat();
   if (stored.length) {
     State.txns = stored.filter(t => (t.confidence ?? 1) >= 0.7);
@@ -2684,7 +2386,7 @@ el('btn-parse').addEventListener('click', () => importText(el('paste-box').value
 el('btn-export').addEventListener('click', exportCsv);
 el('btn-clear').addEventListener('click', clearAll);
 el('month-select').addEventListener('change', e => { State.month = e.target.value; render(); });
-for (const t of ['month', 'trends', 'tidy', 'wealth']) {
+for (const t of ['month', 'trends', 'tidy']) {
   el(`tab-${t}`).addEventListener('click', () => { State.tab = t; render(); });
 }
 el('file-input').addEventListener('change', async e => {

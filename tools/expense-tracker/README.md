@@ -14,6 +14,18 @@ Tuned for Indian alert formats: HDFC, ICICI (including Amazon Pay ICICI), SBI,
 Axis, Kotak, AU Small Finance, Federal/Jupiter, CSB, and UPI apps — with a
 generic fallback for templates not listed here.
 
+## Scope: expenses only
+
+Net worth and holdings are deliberately out of scope. Zerodha Console and CRED
+already aggregate balances and assets across institutions, and a second,
+partially-informed view of the same thing is worse than none — it invites
+trusting a number built from whatever happened to be imported. This tool answers
+one question well: where the money went.
+
+A net-worth view was built and then removed in commit `00f94c3` (reverted by the
+commit that added this note). It is cherry-pickable if that work moves somewhere
+it belongs.
+
 ## Two sources, one ledger
 
 **Statements are the spine.** A bank or card statement (CSV/Excel) is complete,
@@ -41,23 +53,6 @@ for. When both sources describe the same payment, the statement wins — see
 `dedupe()`, which matches across sources on the bank reference OR on
 date + amount + account, because one source may know a reference the other does
 not. A category you corrected by hand survives the replacement.
-
-## Net worth from what is knowable
-
-No file anyone can export says what an investment is *worth*. A broker's fund
-ledger records cash crossing the account; a bank statement records the bank.
-Current value lives in an app screen or a consolidated account statement.
-
-So `src/wealth.js` keeps two kinds of number visibly apart:
-
-- **Derived** — a bank balance taken from the latest imported statement row.
-  Never typed, always current, nothing to maintain.
-- **Entered** — a value read off an app once a month.
-
-The split is shown, not hidden: the page reports what share of net worth is
-typed rather than read, and flags entered values that are two months old or
-more. A net worth that silently mixes the two invites more confidence than it
-has earned.
 
 ## The long tail nothing can name
 
@@ -123,14 +118,13 @@ what is not there.
 
 ```
 src/statement.js   statement layout detection, narration parsing, balance proof
-src/wealth.js      derived balances, net worth, monthly snapshots
 src/parse.js       field extractors + issuer/noise rules  -> one message to one record
 src/categorize.js  merchant -> category, plus learned user overrides
 src/normalize.js   dedupe, reversals, month aggregation, recurring detection
 src/ui.js          the interface
 src/page.html      markup, design tokens, and the bundle placeholder
 build.mjs          inlines the modules into dist/tracker.html (artifacts are one file)
-test/              83 tests over the parsers, the ledger, the balance check and net worth
+test/              67 tests over the parsers, the ledger and the balance check
 ```
 
 The modules are the single source of truth: node runs them directly for tests,
@@ -139,7 +133,7 @@ and `build.mjs` flattens them into the published page.
 ## Use
 
 ```sh
-npm test     # 83 tests, no dependencies
+npm test     # 67 tests, no dependencies
 npm run build # -> dist/tracker.html, a self-contained page
 ```
 
