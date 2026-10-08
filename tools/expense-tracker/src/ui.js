@@ -22,6 +22,7 @@ const State = {
   sample: false,
   store: null,
   pending: null,
+  wealth: { items: [], snapshots: {} },
   lastImport: null,
 };
 
@@ -45,8 +46,10 @@ function makeStore(db) {
     return {
       kind: 'local',
       async load() {
-        try { return JSON.parse(localStorage.getItem(LS_KEY) || 'null') || { months: {}, rules: {} }; }
-        catch { return { months: {}, rules: {} }; }
+        try {
+          const d = JSON.parse(localStorage.getItem(LS_KEY) || 'null') || {};
+          return { months: d.months || {}, rules: d.rules || {}, wealth: d.wealth || { items: [], snapshots: {} } };
+        } catch { return { months: {}, rules: {}, wealth: { items: [], snapshots: {} } }; }
       },
       async save(data) {
         try { localStorage.setItem(LS_KEY, JSON.stringify(data)); } catch { /* quota or blocked */ }
@@ -56,16 +59,25 @@ function makeStore(db) {
   return {
     kind: 'db',
     async load() {
-      const [monthsSnap, rulesSnap] = await Promise.all([
+      const [monthsSnap, rulesSnap, wealthSnap] = await Promise.all([
         db.collection('months').get(),
         db.doc('meta/rules').get(),
+        db.doc('meta/wealth').get(),
       ]);
       const months = {};
       for (const d of monthsSnap.docs) months[d.id] = (d.data() || {}).txns || [];
-      return { months, rules: (rulesSnap.exists && rulesSnap.data().rules) || {} };
+      const w = wealthSnap.exists ? wealthSnap.data() : null;
+      return {
+        months,
+        rules: (rulesSnap.exists && rulesSnap.data().rules) || {},
+        wealth: { items: (w && w.items) || [], snapshots: (w && w.snapshots) || {} },
+      };
     },
     async save(data, changedMonths) {
-      const jobs = [db.doc('meta/rules').set({ rules: data.rules })];
+      const jobs = [
+        db.doc('meta/rules').set({ rules: data.rules }),
+        db.doc('meta/wealth').set(data.wealth || { items: [], snapshots: {} }),
+      ];
       const months = changedMonths || Object.keys(data.months);
       for (const ym of months) {
         jobs.push(db.doc(`months/${ym}`).set({ txns: data.months[ym] || [], updatedAt: new Date().toISOString() }));
@@ -90,8 +102,16 @@ function bucketByMonth(txns) {
 }
 
 async function persist(changed) {
-  if (State.sample) return;  // sample data is never written to storage
-  const data = { months: bucketByMonth(State.txns.concat(State.review)), rules: State.rules };
+  // Wealth figures are the owner's own and worth keeping even while the sample
+  // ledger is on screen - but the sample transactions themselves never are.
+  const showingSample = State.sample;
+  if (showingSample && !State.wealth.items.length) return;
+  const data = {
+    months: showingSample ? {} : bucketByMonth(State.txns.concat(State.review)),
+    rules: State.rules,
+    wealth: State.wealth,
+  };
+  if (showingSample) changed = [];
   try { await State.store.save(data, changed); }
   catch (e) { toast('Could not save. Your changes are on screen but not stored.'); }
 }
@@ -462,7 +482,8 @@ function render() {
   if (!State.month || (!months.includes(State.month) && months.length)) State.month = months[0];
   renderHeader(months);
   el('view').innerHTML = State.tab === 'month' ? monthView()
-    : State.tab === 'trends' ? trendsView() : tidyView();
+    : State.tab === 'trends' ? trendsView()
+    : State.tab === 'wealth' ? wealthView() : tidyView();
   el('review-panel').innerHTML = reviewPanel();
   wireView();
 }
@@ -473,7 +494,7 @@ function renderHeader(months) {
     : `<option>No data yet</option>`;
   el('month-select').innerHTML = opts;
   el('month-select').disabled = !months.length;
-  for (const t of ['month', 'trends', 'tidy']) el(`tab-${t}`).setAttribute('aria-selected', String(State.tab === t));
+  for (const t of ['month', 'trends', 'tidy', 'wealth']) el(`tab-${t}`).setAttribute('aria-selected', String(State.tab === t));
   const unlabelled = State.txns.filter(t => t.direction === 'debit' && !t.netted && t.category === 'Miscellaneous').length;
   el('tidy-count').textContent = unlabelled;
   el('tidy-count').hidden = !unlabelled;
@@ -609,6 +630,136 @@ function catTrendTable(months) {
     }).join('')}</tr>`).join('')}</tbody></table></div>`;
 }
 
+/* ----------------------------------------------------------------- wealth */
+
+const today = () => new Date().toISOString().slice(0, 10);
+const thisMonth = () => new Date().toISOString().slice(0, 7);
+
+/**
+ * Net worth from two kinds of number, kept visibly apart: balances derived from
+ * imported statements, and values the owner reads off an app once a month. No
+ * exportable file states what an investment is worth, so the typed half is
+ * unavoidable - what is avoidable is pretending it is as fresh as the rest.
+ */
+/** The headline block, kept separate so a single edited field can refresh it
+ *  without re-rendering the inputs underneath and stealing focus. */
+function wealthHeadHtml(s, invested) {
+  return `
+  <section class="summary">
+    <div class="tile tile-lead">
+      <span class="tile-label">Net worth</span>
+      <span class="figure">${INR(s.netWorth)}</span>
+      <span class="tile-sub">${INR(s.assets)} held · ${INR(s.debts)} owed</span>
+    </div>
+    <div class="tile">
+      <span class="tile-label">Put into investments</span>
+      <span class="figure-sm">${INR(invested.net)}</span>
+      <span class="tile-sub">from transactions tagged Investment here</span>
+    </div>
+    <div class="tile">
+      <span class="tile-label">Gain on what you priced</span>
+      <span class="figure-sm ${s.gain !== null && s.gain < 0 ? 'is-negative' : ''}">${s.gain === null ? '—' : INR(s.gain)}</span>
+      <span class="tile-sub">${s.gain === null ? 'add a cost next to a value' : `${s.gainPct}% over ${INR(s.costTotal)}`}</span>
+    </div>
+    <div class="tile">
+      <span class="tile-label">Typed, not read</span>
+      <span class="figure-sm">${s.enteredShare}%</span>
+      <span class="tile-sub">${s.enteredShare > 50 ? 'most of this is as fresh as you last made it' : 'most comes from statements'}</span>
+    </div>
+  </section>
+
+  ${s.staleRows.length ? `<div class="check check-bad" style="margin-bottom:14px">
+    <strong>${s.staleRows.length} value${s.staleRows.length === 1 ? ' is' : 's are'} two months old or more</strong>
+    ${esc(s.staleRows.map(r => r.name).join(', '))} — net worth is only as current as these.</div>` : ''}`;
+}
+
+function wealthView() {
+  const derived = deriveBankBalances(State.txns);
+  const entered = State.wealth.items;
+  const s = summarizeWealth(derived, entered);
+  const invested = investedFromLedger(State.txns);
+  const series = snapshotSeries(State.wealth.snapshots);
+
+  const kindOptions = sel => ALL_KINDS.map(k => `<option${k === sel ? ' selected' : ''}>${k}</option>`).join('');
+
+  const rows = entered.map((it, i) => `
+    <tr>
+      <td><input class="w-in" data-i="${i}" data-f="name" value="${esc(it.name || '')}" placeholder="What is it"></td>
+      <td><select class="w-in" data-i="${i}" data-f="kind">${kindOptions(it.kind)}</select></td>
+      <td class="num"><input class="w-in num" data-i="${i}" data-f="value" type="number" step="0.01" value="${it.value ?? ''}"></td>
+      <td class="num"><input class="w-in num" data-i="${i}" data-f="cost" type="number" step="0.01" value="${it.cost ?? ''}" placeholder="—"></td>
+      <td class="mono dim">${esc(it.asOf || '')}</td>
+      <td><button class="btn btn-sm btn-ghost" data-w-del="${i}" aria-label="Remove ${esc(it.name || 'row')}">Remove</button></td>
+    </tr>`).join('');
+
+  const trend = series.length >= 2
+    ? columnChart(series.map(p => ({ label: monthLabel(p.month), short: monthLabel(p.month).slice(0, 3), value: Math.max(p.netWorth, 0) })))
+    : `<p class="empty">Save a snapshot each month and the trend appears here.</p>`;
+
+  return `
+  <div id="wealth-head">${wealthHeadHtml(s, invested)}</div>
+  <section class="panel">
+    <h2>From your statements <span class="count">${derived.length}</span></h2>
+    <p class="note" style="margin:0 0 14px">Closing balances taken straight from what you imported. These update themselves
+      on the next import — nothing to maintain.</p>
+    ${derived.length ? `<div class="table-wrap"><table>
+      <thead><tr><th>Account</th><th class="num">Balance</th><th>As of</th></tr></thead>
+      <tbody>${derived.map(d => `<tr>
+        <td class="merchant">${esc(d.name)}</td>
+        <td class="num mono">${INR(d.value, 2)}</td>
+        <td class="mono dim">${esc(d.asOf || '')}</td></tr>`).join('')}</tbody>
+    </table></div>` : `<p class="empty">Import a statement with a balance column and your accounts appear here.</p>`}
+  </section>
+
+  <section class="panel">
+    <h2>What you hold and owe <span class="count">${entered.length}</span></h2>
+    <p class="note" style="margin:0 0 14px">The part no file can tell us. Read the current value off Groww, INDmoney or your
+      card app and type it here — once a month is enough. Put what you paid in <strong>Cost</strong> and the gain works itself out.
+      Credit cards and loans count as money owed.</p>
+    ${entered.length ? `<div class="table-wrap"><table>
+      <thead><tr><th>Name</th><th>Kind</th><th class="num">Value today</th><th class="num">Cost</th><th>Updated</th><th></th></tr></thead>
+      <tbody>${rows}</tbody>
+    </table></div>` : `<p class="empty">Nothing added yet.</p>`}
+    <div class="drawer-actions">
+      <button class="btn btn-primary" id="btn-w-add">Add a holding</button>
+      ${invested.net > 0 && !entered.some(i => i.kind === 'Investment') ? `<button class="btn" id="btn-w-seed">Start one from your ${INR(invested.net)} of tagged investments</button>` : ''}
+    </div>
+  </section>
+
+  <section class="panel">
+    <h2>Net worth over time <span class="count">${series.length}</span></h2>
+    ${trend}
+    <div class="drawer-actions" style="margin-top:16px">
+      <button class="btn" id="btn-w-snap">Save ${esc(monthLabel(thisMonth()))} as a snapshot</button>
+      ${series.length ? `<span class="note" style="margin:0">Last saved ${esc(monthLabel(series[series.length - 1].month))}.</span>` : ''}
+    </div>
+  </section>`;
+}
+
+async function wealthEdit(i, field, raw) {
+  const item = State.wealth.items[i];
+  if (!item) return;
+  const next = { ...item };
+  if (field === 'value' || field === 'cost') {
+    const n = Number(raw);
+    next[field] = raw === '' ? undefined : (Number.isFinite(n) ? n : item[field]);
+  } else {
+    next[field] = raw;
+  }
+  // Any change to a figure restamps it, so staleness tracks reality.
+  if (field === 'value') next.asOf = today();
+  State.wealth.items = State.wealth.items.map((x, j) => (j === i ? next : x));
+  await persist();
+  refreshWealthHead();
+}
+
+function refreshWealthHead() {
+  const head = el('wealth-head');
+  if (!head) return;
+  const s = summarizeWealth(deriveBankBalances(State.txns), State.wealth.items);
+  head.innerHTML = wealthHeadHtml(s, investedFromLedger(State.txns));
+}
+
 /* ---------------------------------------------------------------- tidy up */
 
 /**
@@ -737,6 +888,36 @@ function wireView() {
   for (const b of document.querySelectorAll('[data-review-drop]')) {
     b.addEventListener('click', () => dropReview(+b.dataset.reviewDrop));
   }
+  for (const inp of document.querySelectorAll('.w-in')) {
+    inp.addEventListener('change', e => wealthEdit(Number(e.target.dataset.i), e.target.dataset.f, e.target.value));
+  }
+  for (const b of document.querySelectorAll('[data-w-del]')) {
+    b.addEventListener('click', async () => {
+      State.wealth.items = State.wealth.items.filter((_, j) => j !== Number(b.dataset.wDel));
+      await persist(); render();
+    });
+  }
+  const wAdd = el('btn-w-add');
+  if (wAdd) wAdd.addEventListener('click', async () => {
+    State.wealth.items = [...State.wealth.items, { name: '', kind: 'Investment', value: 0, asOf: today() }];
+    await persist(); render();
+  });
+  const wSeed = el('btn-w-seed');
+  if (wSeed) wSeed.addEventListener('click', async () => {
+    const inv = investedFromLedger(State.txns);
+    State.wealth.items = [...State.wealth.items,
+      { name: 'Investments', kind: 'Investment', value: inv.net, cost: inv.net, asOf: today() }];
+    await persist(); render();
+    toast('Added at cost. Replace the value with what it is worth today.');
+  });
+  const wSnap = el('btn-w-snap');
+  if (wSnap) wSnap.addEventListener('click', async () => {
+    const s = summarizeWealth(deriveBankBalances(State.txns), State.wealth.items);
+    State.wealth.snapshots = takeSnapshot(State.wealth.snapshots, s, thisMonth());
+    await persist(); render();
+    toast(`Saved ${monthLabel(thisMonth())} at ${INR(s.netWorth)}.`);
+  });
+
   const applyCounters = el('btn-apply-counters');
   if (applyCounters) {
     applyCounters.addEventListener('click', () => {
@@ -831,6 +1012,7 @@ async function boot() {
   try { data = await State.store.load(); } catch { toast('Could not load saved data.'); }
 
   State.rules = data.rules || {};
+  State.wealth = data.wealth || { items: [], snapshots: {} };
   const stored = Object.values(data.months || {}).flat();
   if (stored.length) {
     State.txns = stored.filter(t => (t.confidence ?? 1) >= 0.7);
@@ -849,7 +1031,7 @@ el('btn-parse').addEventListener('click', () => importText(el('paste-box').value
 el('btn-export').addEventListener('click', exportCsv);
 el('btn-clear').addEventListener('click', clearAll);
 el('month-select').addEventListener('change', e => { State.month = e.target.value; render(); });
-for (const t of ['month', 'trends', 'tidy']) {
+for (const t of ['month', 'trends', 'tidy', 'wealth']) {
   el(`tab-${t}`).addEventListener('click', () => { State.tab = t; render(); });
 }
 el('file-input').addEventListener('change', async e => {

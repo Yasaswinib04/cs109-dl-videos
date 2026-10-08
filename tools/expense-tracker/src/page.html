@@ -193,6 +193,8 @@ textarea { width:100%; min-height:170px; background:var(--sunk); border:1px soli
 .acct-row { display:flex; flex-wrap:wrap; gap:10px; align-items:flex-end; margin-bottom:6px; }
 .acct-row label { display:flex; flex-direction:column; gap:4px; font-family:var(--mono); font-size:10px;
   letter-spacing:.08em; text-transform:uppercase; color:var(--muted); }
+.w-in { background:var(--surface-2); border:1px solid var(--line); border-radius:6px; padding:5px 8px; font-size:13px; width:100%; min-width:90px; }
+input.w-in.num { text-align:right; font-family:var(--mono); }
 .acct-row input { background:var(--surface-2); border:1px solid var(--line); border-radius:6px;
   padding:6px 9px; font-size:13px; width:170px; }
 .check { border-radius:8px; padding:12px 14px; font-size:13px; margin:14px 0; border:1px solid; }
@@ -240,6 +242,7 @@ textarea { width:100%; min-height:170px; background:var(--sunk); border:1px soli
       <button class="tab" id="tab-month" role="tab" aria-selected="true">Month</button>
       <button class="tab" id="tab-trends" role="tab" aria-selected="false">Trends</button>
       <button class="tab" id="tab-tidy" role="tab" aria-selected="false">Tidy up<span class="tab-badge" id="tidy-count" hidden></span></button>
+      <button class="tab" id="tab-wealth" role="tab" aria-selected="false">Wealth</button>
     </div>
     <select id="month-select" aria-label="Month to show"></select>
     <button class="btn btn-primary" id="btn-import">Import</button>
@@ -257,7 +260,7 @@ textarea { width:100%; min-height:170px; background:var(--sunk); border:1px soli
   <p class="note" style="display:flex;gap:14px;flex-wrap:wrap;align-items:center;">
     <button class="btn btn-sm" id="btn-export">Export CSV</button>
     <button class="btn btn-sm btn-ghost" id="btn-clear">Delete all data</button>
-    <span>Your messages are parsed on this page and stored with it. Nothing is sent anywhere else.</span>
+    <span>Your statements are read on this page and stored with it. Nothing is sent anywhere else.</span>
   </p>
 </div>
 
