@@ -3,7 +3,7 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700&family=Figtree:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
 <style>
-/* Layout: one narrow column, phone-first — today's tally on top, the add-food composer, then the day's plates and the week strip. */
+/* Layout: one narrow column, phone-first — day tally + protein/fiber/carb focus on top, the add-food composer, then the day's plates and the week strip. */
 :root {
   --bg: #f3f5ef;
   --surface: #ffffff;
@@ -15,10 +15,15 @@
   --leaf-ink: #ffffff;
   --leaf-soft: #dcebdf;
   --turmeric: #c98a0c;
+  --turmeric-soft: #f6ead0;
   --chili: #c4442c;
   --protein: #2d7a4c;
   --carbs: #c98a0c;
   --fat: #8a5a9e;
+  --fiber: #3a7d8c;
+  --gi-low: #2d7a4c;
+  --gi-med: #c98a0c;
+  --gi-high: #c4442c;
   --display: "Bricolage Grotesque", "Avenir Next", system-ui, sans-serif;
   --body: "Figtree", system-ui, -apple-system, "Segoe UI", sans-serif;
   --mono: "IBM Plex Mono", ui-monospace, "SF Mono", Menlo, monospace;
@@ -28,19 +33,23 @@
   :root:not([data-theme="light"]) {
     --bg: #111613; --surface: #19201b; --sunk: #222b25; --ink: #e6ece5; --muted: #98a99d;
     --line: #2c3730; --leaf: #62c08a; --leaf-ink: #0e1a12; --leaf-soft: #20382a;
-    --turmeric: #f0b53a; --chili: #ee6d55; --protein: #62c08a; --carbs: #f0b53a; --fat: #c393d8;
+    --turmeric: #f0b53a; --turmeric-soft: #332a14; --chili: #ee6d55;
+    --protein: #62c08a; --carbs: #f0b53a; --fat: #c393d8; --fiber: #68b8c8;
+    --gi-low: #62c08a; --gi-med: #f0b53a; --gi-high: #ee6d55;
     color-scheme: dark;
   }
 }
 :root[data-theme="dark"] {
   --bg: #111613; --surface: #19201b; --sunk: #222b25; --ink: #e6ece5; --muted: #98a99d;
   --line: #2c3730; --leaf: #62c08a; --leaf-ink: #0e1a12; --leaf-soft: #20382a;
-  --turmeric: #f0b53a; --chili: #ee6d55; --protein: #62c08a; --carbs: #f0b53a; --fat: #c393d8;
+  --turmeric: #f0b53a; --turmeric-soft: #332a14; --chili: #ee6d55;
+  --protein: #62c08a; --carbs: #f0b53a; --fat: #c393d8; --fiber: #68b8c8;
+  --gi-low: #62c08a; --gi-med: #f0b53a; --gi-high: #ee6d55;
   color-scheme: dark;
 }
 * { box-sizing: border-box; }
 body { background: var(--bg); color: var(--ink); font-family: var(--body); font-size: 15px; line-height: 1.5; }
-.wrap { max-width: 640px; margin: 0 auto; padding-inline: 16px; padding-block: 20px 48px; display: grid; gap: 18px; }
+.wrap { max-width: 640px; margin: 0 auto; padding-inline: 16px; padding-block: 20px 48px; display: grid; gap: 16px; }
 h1, h2, h3 { font-family: var(--display); margin: 0; text-wrap: balance; }
 h1 { font-size: 26px; font-weight: 700; letter-spacing: -0.01em; }
 h2 { font-size: 17px; font-weight: 700; }
@@ -71,14 +80,24 @@ button { cursor: pointer; }
 .bar { height: 10px; border-radius: 999px; background: var(--sunk); overflow: hidden; }
 .bar > i { display: block; height: 100%; background: var(--leaf); border-radius: inherit; transition: width .3s; }
 .bar.over > i { background: var(--chili); }
-.macros { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
+.macros { display: grid; grid-template-columns: repeat(auto-fit, minmax(66px, 1fr)); gap: 12px; }
 .macro { display: grid; gap: 4px; min-width: 0; }
 .macro .mbar { height: 5px; border-radius: 999px; background: var(--sunk); overflow: hidden; }
-.macro .mbar i { display: block; height: 100%; }
+.macro .mbar i { display: block; height: 100%; transition: width .3s; }
 .macro .val { font-family: var(--mono); font-size: 13px; }
 .burnrow { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; font-size: 13px; color: var(--muted); border-top: 1px dashed var(--line); padding-top: 12px; }
 .burnrow input { width: 84px; }
 .burnrow b { color: var(--ink); font-family: var(--mono); font-weight: 500; }
+
+/* focus card */
+.focus { background: var(--leaf-soft); border: 1px solid var(--line); border-radius: var(--r); padding: 14px 16px; display: grid; gap: 10px; }
+.focus h2 { font-size: 14px; }
+.focus-chips { display: flex; gap: 8px; flex-wrap: wrap; }
+.chip { display: inline-flex; align-items: baseline; gap: 6px; padding: 5px 10px; border-radius: 999px; background: var(--surface); border: 1px solid var(--line); font-size: 12px; font-weight: 600; }
+.chip .n { font-family: var(--mono); font-weight: 500; }
+.chip.ok { border-color: var(--leaf); color: var(--leaf); }
+.chip.warn { border-color: var(--turmeric); color: var(--turmeric); }
+.focus .line { font-size: 13px; color: var(--ink); }
 
 /* inputs */
 input[type=text], input[type=number], select, textarea {
@@ -105,18 +124,25 @@ textarea { width: 100%; resize: vertical; min-height: 84px; }
 .row { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
 .row.end { justify-content: flex-end; }
 .manual { display: grid; grid-template-columns: 2fr 1fr; gap: 8px; }
-.manual .macrosin { grid-column: 1 / -1; display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+.manual .macrosin { grid-column: 1 / -1; display: grid; grid-template-columns: repeat(auto-fit, minmax(90px, 1fr)); gap: 8px; }
 .status { font-size: 13px; color: var(--muted); }
 .status.err { color: var(--chili); }
 
+/* gi dot */
+.gi { display: inline-block; width: 8px; height: 8px; border-radius: 999px; flex: none; vertical-align: middle; }
+.gi.low { background: var(--gi-low); }
+.gi.med { background: var(--gi-med); }
+.gi.high { background: var(--gi-high); }
+
 /* review table */
 .review { border: 1px solid var(--line); border-radius: 12px; overflow-x: auto; }
-.review table { width: 100%; border-collapse: collapse; font-size: 13px; min-width: 460px; }
+.review table { width: 100%; border-collapse: collapse; font-size: 13px; min-width: 520px; }
 .review th { text-align: left; font-weight: 600; color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: .06em; padding: 8px; border-bottom: 1px solid var(--line); }
 .review td { padding: 6px 8px; border-bottom: 1px solid var(--line); vertical-align: middle; }
 .review tr:last-child td { border-bottom: 0; }
+.review .food { display: flex; align-items: center; gap: 7px; }
 .review input { width: 100%; padding: 5px 7px; border-radius: 7px; }
-.review input.n { width: 64px; font-family: var(--mono); }
+.review input.n { width: 60px; font-family: var(--mono); }
 .review .x { border: 0; background: transparent; color: var(--muted); font-size: 16px; }
 .review-note { font-size: 13px; color: var(--muted); padding: 8px 10px; }
 
@@ -131,8 +157,9 @@ textarea { width: 100%; resize: vertical; min-height: 84px; }
 .entry .pics .ph { width: 64px; height: 64px; border-radius: 9px; background: var(--sunk); }
 .entry-body { min-width: 0; display: grid; gap: 4px; }
 .item { display: flex; justify-content: space-between; gap: 10px; font-size: 14px; }
-.item .nm { min-width: 0; overflow-wrap: anywhere; }
-.item .nm span { color: var(--muted); font-size: 12px; margin-left: 4px; }
+.item .nm { min-width: 0; overflow-wrap: anywhere; display: flex; align-items: center; gap: 7px; }
+.item .nm em { font-style: normal; }
+.item .nm span { color: var(--muted); font-size: 12px; }
 .item .k { font-family: var(--mono); font-size: 13px; white-space: nowrap; }
 .entry-foot { display: flex; justify-content: space-between; align-items: center; gap: 8px; font-size: 12px; color: var(--muted); margin-top: 4px; }
 .linkbtn { border: 0; background: transparent; color: var(--muted); font-size: 12px; text-decoration: underline; padding: 0; }
@@ -148,8 +175,12 @@ textarea { width: 100%; resize: vertical; min-height: 84px; }
 /* settings */
 details { background: var(--surface); border: 1px solid var(--line); border-radius: var(--r); padding: 12px 16px; }
 summary { cursor: pointer; font-weight: 600; font-family: var(--display); }
-.settings { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 12px; padding-top: 12px; }
+.settings { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; padding-top: 12px; }
 .settings label { display: grid; gap: 4px; font-size: 13px; color: var(--muted); }
+.settings label.wide { grid-column: 1 / -1; }
+.hint { font-size: 12px; color: var(--muted); padding-top: 6px; }
+.hint b { color: var(--leaf); cursor: pointer; text-decoration: underline; }
+.disclaimer { font-size: 12px; color: var(--muted); line-height: 1.5; padding-top: 12px; border-top: 1px dashed var(--line); margin-top: 4px; }
 @media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
 </style>
 
@@ -179,6 +210,7 @@ summary { cursor: pointer; font-weight: 600; font-family: var(--display); }
     <div class="bar" id="kcalBar"><i style="width:0%"></i></div>
     <div class="macros">
       <div class="macro"><div class="label">Protein</div><div class="mbar"><i id="pBar" style="background:var(--protein);width:0%"></i></div><div class="val" id="pVal">0 / 90 g</div></div>
+      <div class="macro"><div class="label">Fiber</div><div class="mbar"><i id="fibBar" style="background:var(--fiber);width:0%"></i></div><div class="val" id="fibVal">0 / 30 g</div></div>
       <div class="macro"><div class="label">Carbs</div><div class="mbar"><i id="cBar" style="background:var(--carbs);width:0%"></i></div><div class="val" id="cVal">0 g</div></div>
       <div class="macro"><div class="label">Fat</div><div class="mbar"><i id="fBar" style="background:var(--fat);width:0%"></i></div><div class="val" id="fVal">0 g</div></div>
     </div>
@@ -187,6 +219,12 @@ summary { cursor: pointer; font-weight: 600; font-family: var(--display); }
       <input type="number" id="burn" min="0" step="10" inputmode="numeric" placeholder="0" class="num">
       <span>kcal · net <b id="net">0</b></span>
     </div>
+  </section>
+
+  <section class="focus" id="focus" aria-label="Today's focus" hidden>
+    <h2>Today's focus</h2>
+    <div class="focus-chips" id="focusChips"></div>
+    <div class="line" id="focusLine"></div>
   </section>
 
   <section class="composer" aria-label="Add food">
@@ -206,7 +244,7 @@ summary { cursor: pointer; font-weight: 600; font-family: var(--display); }
     </div>
 
     <div id="pane-text" class="pane">
-      <textarea id="foodText" placeholder="2 phulkas, 1 katori dal tadka, bhindi sabzi, small bowl curd&#10;1 cup filter coffee with sugar"></textarea>
+      <textarea id="foodText" placeholder="2 idli, sambar, coconut chutney, filter coffee&#10;or: 2 phulka, 1 katori rajma, bhindi sabzi, bowl of curd"></textarea>
     </div>
 
     <div id="pane-photo" class="pane" hidden>
@@ -216,15 +254,16 @@ summary { cursor: pointer; font-weight: 600; font-family: var(--display); }
         <input type="file" id="photoIn" accept="image/jpeg,image/png,image/webp,image/gif" multiple hidden>
       </div>
       <div class="thumbs" id="photoThumbs"></div>
-      <input type="text" id="photoNote" placeholder="Optional note: ‘ate half’, ‘ghee on rice’" style="width:100%;margin-top:8px">
+      <input type="text" id="photoNote" placeholder="Optional note: ‘ate half’, ‘extra ghee on rice’" style="width:100%;margin-top:8px">
     </div>
 
     <div id="pane-manual" class="pane" hidden>
       <div class="manual">
-        <input type="text" id="mName" placeholder="Food (e.g. Protein bar)">
+        <input type="text" id="mName" placeholder="Food (e.g. Paneer bhurji)">
         <input type="number" id="mKcal" placeholder="kcal" min="0" class="num">
         <div class="macrosin">
           <input type="number" id="mP" placeholder="Protein g" min="0" class="num">
+          <input type="number" id="mFib" placeholder="Fiber g" min="0" class="num">
           <input type="number" id="mC" placeholder="Carbs g" min="0" class="num">
           <input type="number" id="mF" placeholder="Fat g" min="0" class="num">
         </div>
@@ -240,7 +279,7 @@ summary { cursor: pointer; font-weight: 600; font-family: var(--display); }
     <div id="reviewBox" hidden>
       <div class="review">
         <table>
-          <thead><tr><th>Food</th><th>Portion</th><th>kcal</th><th>P</th><th>C</th><th>F</th><th></th></tr></thead>
+          <thead><tr><th>Food</th><th>Portion</th><th>kcal</th><th>P</th><th>Fib</th><th>C</th><th>F</th><th></th></tr></thead>
           <tbody id="reviewRows"></tbody>
         </table>
         <div class="review-note" id="reviewNote" hidden></div>
@@ -263,12 +302,29 @@ summary { cursor: pointer; font-weight: 600; font-family: var(--display); }
     <div id="weekChart"></div>
   </section>
 
-  <details>
-    <summary>Targets</summary>
+  <details id="targets">
+    <summary>Targets &amp; diet</summary>
     <div class="settings">
       <label for="goalIn">Daily calories (kcal)<input type="number" id="goalIn" min="800" step="50" class="num"></label>
       <label for="protIn">Protein (g)<input type="number" id="protIn" min="0" step="5" class="num"></label>
+      <label for="fibIn">Fiber (g)<input type="number" id="fibIn" min="0" step="5" class="num"></label>
+      <label for="wtIn">Body weight (kg)<input type="number" id="wtIn" min="0" step="0.5" class="num"></label>
+      <label for="dietIn">Eating style<select id="dietIn">
+        <option value="lacto">Lacto-vegetarian</option>
+        <option value="egg">Eggetarian</option>
+        <option value="vegan">Vegan</option>
+        <option value="nonveg">Non-vegetarian</option>
+      </select></label>
+      <label for="cuisineIn">Cuisine<select id="cuisineIn">
+        <option value="both">South &amp; North Indian</option>
+        <option value="south">South Indian</option>
+        <option value="north">North Indian</option>
+      </select></label>
+      <label class="wide" for="notesIn">Diet notes for the estimator (allergies, "no onion-garlic", what you cook with)<textarea id="notesIn" style="min-height:60px" placeholder="e.g. no onion-garlic, cook in groundnut oil, lactose-free milk"></textarea></label>
     </div>
+    <div class="hint" id="protHint"></div>
+    <div class="hint">Gradual fat loss holds up better than a steep cut — that matters with thyroid, which slows when you under-eat for long. Pick a calorie goal you can keep, and lean on protein and fiber rather than hunger.</div>
+    <div class="disclaimer">Plate Log gives general wellness estimates, not medical advice. Calorie and glycemic numbers are approximate. With PCOD and a thyroid condition, run real diet changes past your doctor or a dietitian, and keep taking anything they've prescribed.</div>
   </details>
 </div>
 
@@ -284,16 +340,17 @@ summary { cursor: pointer; font-weight: 600; font-family: var(--display); }
   const addDays = (s, n) => { const d = parseYmd(s); d.setDate(d.getDate() + n); return ymd(d); };
   const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
   const num = (v) => { const n = Number(v); return Number.isFinite(n) && n >= 0 ? n : 0; };
+  const GI = (g) => (g === "high" || g === "med" || g === "low") ? g : "";
 
   const state = {
     today: ymd(new Date()),
     date: ymd(new Date()),
-    days: {},           // date -> {date, burn, entries}
-    settings: { goal: 2000, protein: 90 },
-    photoCache: {},     // entryId -> [dataURL]
-    pendingPhotos: [],  // {blob, thumb}
+    days: {},
+    settings: { goal: 2000, protein: 90, fiber: 30, weight: 0, diet: "lacto", cuisine: "both", notes: "" },
+    photoCache: {},
+    pendingPhotos: [],
     tab: "text",
-    review: null,       // {items, note, src, photos}
+    review: null,
     canSave: true,
   };
 
@@ -355,10 +412,13 @@ summary { cursor: pointer; font-weight: 600; font-family: var(--display); }
   const day = (d = state.date) => state.days[d] || (state.days[d] = { date: d, burn: 0, entries: [] });
   const persist = () => store.saveDay(day()).catch(onWriteError);
 
-  // ---------- rendering ----------
+  // ---------- totals ----------
   function totals(d) {
-    const t = { kcal: 0, p: 0, c: 0, f: 0 };
-    (d.entries || []).forEach((e) => e.items.forEach((i) => { t.kcal += num(i.kcal); t.p += num(i.p); t.c += num(i.c); t.f += num(i.f); }));
+    const t = { kcal: 0, p: 0, c: 0, f: 0, fib: 0, spiky: 0 };
+    (d.entries || []).forEach((e) => e.items.forEach((i) => {
+      t.kcal += num(i.kcal); t.p += num(i.p); t.c += num(i.c); t.f += num(i.f); t.fib += num(i.fib);
+      if (i.gi === "high") t.spiky += 1;
+    }));
     return t;
   }
 
@@ -371,7 +431,7 @@ summary { cursor: pointer; font-weight: 600; font-family: var(--display); }
   }
 
   function renderTally() {
-    const d = day(), t = totals(d), goal = state.settings.goal || 2000, prot = state.settings.protein || 90;
+    const d = day(), t = totals(d), s = state.settings, goal = s.goal || 2000, prot = s.protein || 90, fibGoal = s.fiber || 30;
     $("eaten").firstChild.nodeValue = fmt(t.kcal);
     const left = goal - t.kcal, over = left < 0;
     $("remainLabel").textContent = (over ? "Over " : "Left of ") + fmt(goal);
@@ -379,15 +439,52 @@ summary { cursor: pointer; font-weight: 600; font-family: var(--display); }
     $("remainBox").classList.toggle("over", over);
     $("kcalBar").classList.toggle("over", over);
     $("kcalBar").firstElementChild.style.width = Math.min(100, (t.kcal / goal) * 100) + "%";
-    const kc = t.p * 4 + t.c * 4 + t.f * 9 || 1;
     $("pBar").style.width = Math.min(100, (t.p / prot) * 100) + "%";
+    $("fibBar").style.width = Math.min(100, (t.fib / fibGoal) * 100) + "%";
+    const kc = t.c * 4 + t.f * 9 || 1;
     $("cBar").style.width = Math.min(100, (t.c * 4 / kc) * 100) + "%";
     $("fBar").style.width = Math.min(100, (t.f * 9 / kc) * 100) + "%";
     $("pVal").textContent = fmt(t.p) + " / " + fmt(prot) + " g";
+    $("fibVal").textContent = fmt(t.fib) + " / " + fmt(fibGoal) + " g";
     $("cVal").textContent = fmt(t.c) + " g";
     $("fVal").textContent = fmt(t.f) + " g";
     if (document.activeElement !== $("burn")) $("burn").value = d.burn ? d.burn : "";
     $("net").textContent = fmt(t.kcal - num(d.burn));
+  }
+
+  function renderFocus() {
+    const d = day(), t = totals(d), s = state.settings;
+    const box = $("focus");
+    if (!d.entries.length) { box.hidden = true; return; }
+    box.hidden = false;
+    const prot = s.protein || 90, fibGoal = s.fiber || 30;
+    const chips = $("focusChips"); chips.replaceChildren();
+    const chip = (label, val, ok) => {
+      const c = el("span", { class: "chip " + (ok ? "ok" : "warn") });
+      c.append(el("span", { text: label }), el("span", { class: "n", text: val }));
+      chips.append(c);
+    };
+    const pOk = t.p >= prot * 0.9;
+    const fibOk = t.fib >= fibGoal * 0.8;
+    const spikyOk = t.spiky < 3;
+    chip("Protein", fmt(t.p) + "/" + fmt(prot) + "g", pOk);
+    chip("Fiber", fmt(t.fib) + "/" + fmt(fibGoal) + "g", fibOk);
+    chip("Spiky carbs", String(t.spiky), spikyOk);
+
+    let line;
+    if (!pOk) {
+      const gap = Math.max(0, Math.round(prot - t.p));
+      const opts = s.diet === "vegan" ? "tofu, soya chunks, rajma, chana, or a dal" : s.diet === "egg"
+        ? "2 eggs, paneer, curd, or a dal" : "paneer, curd, a katori of dal, sprouts, or soya chunks";
+      line = "Protein is your main lever for PCOD and for holding muscle while the fat comes off. About " + gap + " g to go — " + opts + " would close it.";
+    } else if (!fibOk) {
+      line = "Good on protein. Add some fiber — a vegetable sabzi, salad, or a fruit with the skin — it steadies blood sugar and keeps you full.";
+    } else if (!spikyOk) {
+      line = "A few high-GI items today (white rice, maida, sugar). Swapping one for millets, brown rice, or extra roti-and-sabzi softens the insulin spike that PCOD is sensitive to.";
+    } else {
+      line = "Balanced day — solid protein and fiber, carbs kept gentle. This is the pattern that works for PCOD and steady fat loss.";
+    }
+    $("focusLine").textContent = line;
   }
 
   function el(tag, attrs = {}, ...kids) {
@@ -397,12 +494,19 @@ summary { cursor: pointer; font-weight: 600; font-family: var(--display); }
     return n;
   }
 
+  function giDot(gi) {
+    const g = GI(gi);
+    if (!g) return null;
+    const title = { low: "Low GI — gentle on blood sugar", med: "Medium GI", high: "High GI — spikes blood sugar" }[g];
+    return el("span", { class: "gi " + g, title, "aria-label": title });
+  }
+
   function renderLog() {
     const log = $("log"); log.replaceChildren();
     const d = day();
     if (!d.entries.length) {
       log.append(el("div", { class: "empty", text: state.date === state.today
-        ? "Nothing logged yet today. List what you ate or add a photo of your plate above, and Claude will estimate the calories."
+        ? "Nothing logged yet today. List what you ate or add a photo of your plate above, and Claude will estimate calories, protein, fiber, and how much each item spikes blood sugar."
         : "Nothing logged on this day." }));
       return;
     }
@@ -418,9 +522,10 @@ summary { cursor: pointer; font-weight: 600; font-family: var(--display); }
 
   function renderEntry(e) {
     const body = el("div", { class: "entry-body" });
-    e.items.forEach((i) => body.append(el("div", { class: "item" },
-      el("div", { class: "nm" }, i.n, i.q ? el("span", { text: i.q }) : null),
-      el("div", { class: "k", text: fmt(i.kcal) }))));
+    e.items.forEach((i) => {
+      const nm = el("div", { class: "nm" }, giDot(i.gi), el("em", { text: i.n }), i.q ? el("span", { text: i.q }) : null);
+      body.append(el("div", { class: "item" }, nm, el("div", { class: "k", text: fmt(i.kcal) })));
+    });
     const when = e.t ? new Date(e.t).toLocaleTimeString("en-IN", { hour: "numeric", minute: "2-digit" }) : "";
     const src = e.src === "photo" ? "from photo" : e.src === "text" ? "estimated" : "manual";
     const del = el("button", { class: "linkbtn", text: "Remove" });
@@ -470,7 +575,7 @@ summary { cursor: pointer; font-weight: 600; font-family: var(--display); }
     $("weekAvg").textContent = logged.length ? "avg " + fmt(logged.reduce((a, b) => a + b, 0) / logged.length) + " kcal over " + logged.length + " logged day" + (logged.length > 1 ? "s" : "") : "";
   }
 
-  function render() { renderHeader(); renderTally(); renderLog(); renderWeek(); }
+  function render() { renderHeader(); renderTally(); renderFocus(); renderLog(); renderWeek(); }
 
   function watch() {
     store.watchWeek(addDays(state.date, -6), state.date, (got) => {
@@ -553,12 +658,27 @@ summary { cursor: pointer; font-weight: 600; font-family: var(--display); }
 
   // ---------- Claude estimation ----------
   let sample = null, canImages = false, ctl = null;
+  function dietLine() {
+    const s = state.settings;
+    const style = {
+      lacto: "lacto-vegetarian (no meat, fish or egg; dairy like milk, curd, paneer and ghee is fine)",
+      egg: "eggetarian (no meat or fish; eggs and dairy are fine)",
+      vegan: "vegan (no animal products at all, including dairy)",
+      nonveg: "non-vegetarian (eats everything)",
+    }[s.diet] || "lacto-vegetarian";
+    const cuisine = { both: "South and North Indian", south: "South Indian", north: "North Indian" }[s.cuisine] || "Indian";
+    let l = "They usually eat " + style + ", " + cuisine + " home-style. Estimate whatever is actually described or shown, even if it does not fit that.";
+    if (s.notes && s.notes.trim()) l += " Their notes: " + s.notes.trim().slice(0, 400) + ".";
+    return l;
+  }
   const PROMPT = (what) =>
-`You are a nutrition estimator for a personal calorie log. The person lives in India, so assume Indian home-style portions and recipes unless stated otherwise (katori ≈ 150 ml, phulka ≈ 30 g atta, medium roti with ghee more).
+`You are a nutrition estimator for a personal calorie log. The person lives in India — assume Indian home-style portions and recipes unless stated (katori ≈ 150 ml; 1 idli ≈ 30 g rice-batter; phulka ≈ 30 g atta; restaurant/ghee portions larger).
+${dietLine()}
+They manage PCOD and mild hypothyroidism and want gradual body-fat loss, so blood-sugar impact and protein matter to them.
 ${what}
-Break the meal into separate foods. For each, estimate a realistic portion and its calories and macros. If something is ambiguous, pick the most typical option and say what you assumed in the note.
+Break the meal into separate foods. For each, estimate a realistic portion with its calories and macros, and classify its glycemic impact ("gi"): "low" for dal, vegetables, paneer, curd, whole pulses, nuts; "med" for whole-grain roti, millets, brown rice, fruit, oats; "high" for white rice, idli/dosa/upma from refined rice, maida (naan, bhatura, white bread), potato, sugar, sweets, juice. Include dietary fibre in grams.
 Reply with only JSON in this shape:
-{"items":[{"name":"Dal tadka","portion":"1 katori (150 ml)","kcal":180,"protein":9,"carbs":22,"fat":6}],"note":"one short sentence on assumptions"}`;
+{"items":[{"name":"Dal tadka","portion":"1 katori (150 ml)","kcal":180,"protein":9,"carbs":22,"fat":6,"fiber":5,"gi":"low"}],"note":"one short sentence on portion assumptions"}`;
 
   async function estimate() {
     if (!sample) { setStatus("Calorie estimates need Claude, which isn't available here. Use Manual to log.", true); return; }
@@ -582,7 +702,8 @@ Reply with only JSON in this shape:
       const out = await sample.json(input, opts);
       const items = (out && Array.isArray(out.items) ? out.items : []).map((i) => ({
         n: String(i.name || "Food").slice(0, 80), q: String(i.portion || "").slice(0, 60),
-        kcal: Math.round(num(i.kcal)), p: Math.round(num(i.protein)), c: Math.round(num(i.carbs)), f: Math.round(num(i.fat)),
+        kcal: Math.round(num(i.kcal)), p: Math.round(num(i.protein)), c: Math.round(num(i.carbs)),
+        f: Math.round(num(i.fat)), fib: Math.round(num(i.fiber)), gi: GI(i.gi),
       }));
       if (!items.length) { setStatus("Claude couldn't find any food in that. Try describing it.", true); return; }
       state.review = { items, note: out.note ? String(out.note).slice(0, 300) : "", src, photos };
@@ -608,25 +729,32 @@ Reply with only JSON in this shape:
     if (!r) return;
     const tb = $("reviewRows"); tb.replaceChildren();
     r.items.forEach((it, idx) => {
-      const inp = (key, cls, type = "number") => {
+      const mkInput = (key, cls, type) => {
         const i = el("input", { type, class: cls || "", value: it[key] ?? "", "aria-label": key, id: "rv-" + idx + "-" + key });
         i.oninput = () => { it[key] = type === "number" ? num(i.value) : i.value; };
-        return el("td", {}, i);
+        return i;
       };
+      const foodCell = el("td", {}, el("div", { class: "food" }, giDot(it.gi), mkInput("n", "", "text")));
       const x = el("button", { class: "x", "aria-label": "Remove row", text: "×" });
       x.onclick = () => { r.items.splice(idx, 1); renderReview(); };
-      tb.append(el("tr", {}, inp("n", "", "text"), inp("q", "", "text"), inp("kcal", "n"), inp("p", "n"), inp("c", "n"), inp("f", "n"), el("td", {}, x)));
+      tb.append(el("tr", {}, foodCell, el("td", {}, mkInput("q", "", "text")),
+        el("td", {}, mkInput("kcal", "n", "number")), el("td", {}, mkInput("p", "n", "number")),
+        el("td", {}, mkInput("fib", "n", "number")), el("td", {}, mkInput("c", "n", "number")),
+        el("td", {}, mkInput("f", "n", "number")), el("td", {}, x)));
     });
     const tot = r.items.reduce((s, i) => s + num(i.kcal), 0);
+    const protTot = r.items.reduce((s, i) => s + num(i.p), 0);
+    const spiky = r.items.filter((i) => i.gi === "high").length;
     $("reviewNote").hidden = false;
-    $("reviewNote").textContent = "Total " + fmt(tot) + " kcal" + (r.note ? " · " + r.note : "");
+    $("reviewNote").textContent = "Total " + fmt(tot) + " kcal · " + fmt(protTot) + " g protein"
+      + (spiky ? " · " + spiky + " high-GI item" + (spiky > 1 ? "s" : "") : "") + (r.note ? " · " + r.note : "");
     $("saveEst").disabled = !r.items.length || !state.canSave;
   }
-  $("addRow").onclick = () => { state.review.items.push({ n: "", q: "", kcal: 0, p: 0, c: 0, f: 0 }); renderReview(); };
+  $("addRow").onclick = () => { state.review.items.push({ n: "", q: "", kcal: 0, p: 0, c: 0, f: 0, fib: 0, gi: "" }); renderReview(); };
   $("discard").onclick = () => { state.review = null; renderReview(); setStatus(""); };
   $("saveEst").onclick = () => {
     const r = state.review;
-    const items = r.items.filter((i) => String(i.n).trim()).map((i) => ({ n: String(i.n).trim(), q: String(i.q || "").trim(), kcal: num(i.kcal), p: num(i.p), c: num(i.c), f: num(i.f) }));
+    const items = r.items.filter((i) => String(i.n).trim()).map((i) => ({ n: String(i.n).trim(), q: String(i.q || "").trim(), kcal: num(i.kcal), p: num(i.p), c: num(i.c), f: num(i.f), fib: num(i.fib), gi: GI(i.gi) }));
     if (!items.length) return;
     const entry = { id: uid(), meal: $("meal").value, t: Date.now(), src: r.src, items, photos: r.photos.length };
     if (r.src === "photo" && $("photoNote").value.trim()) entry.note = $("photoNote").value.trim().slice(0, 120);
@@ -641,8 +769,8 @@ Reply with only JSON in this shape:
     const n = $("mName").value.trim(), kcal = num($("mKcal").value);
     if (!n || !kcal) { setStatus("Add a food name and its calories.", true); return; }
     addEntry({ id: uid(), meal: $("meal").value, t: Date.now(), src: "manual", photos: 0,
-      items: [{ n, q: "", kcal, p: num($("mP").value), c: num($("mC").value), f: num($("mF").value) }] });
-    ["mName", "mKcal", "mP", "mC", "mF"].forEach((k) => ($(k).value = ""));
+      items: [{ n, q: "", kcal, p: num($("mP").value), c: num($("mC").value), f: num($("mF").value), fib: num($("mFib").value), gi: "" }] });
+    ["mName", "mKcal", "mP", "mFib", "mC", "mF"].forEach((k) => ($(k).value = ""));
     setStatus("Logged.");
   }
 
@@ -656,18 +784,36 @@ Reply with only JSON in this shape:
   };
   let setT = null;
   const onSettings = () => {
-    state.settings = { goal: num($("goalIn").value) || 2000, protein: num($("protIn").value) || 90 };
-    render();
+    state.settings = {
+      goal: num($("goalIn").value) || 2000, protein: num($("protIn").value) || 90, fiber: num($("fibIn").value) || 30,
+      weight: num($("wtIn").value), diet: $("dietIn").value, cuisine: $("cuisineIn").value, notes: $("notesIn").value.slice(0, 500),
+    };
+    renderProtHint(); render();
     clearTimeout(setT); setT = setTimeout(() => store.saveSettings(state.settings).catch(onWriteError), 700);
   };
-  $("goalIn").oninput = onSettings; $("protIn").oninput = onSettings;
+  ["goalIn", "protIn", "fibIn", "wtIn", "dietIn", "cuisineIn", "notesIn"].forEach((k) => { const n = $(k); n.oninput = onSettings; n.onchange = onSettings; });
+
+  function renderProtHint() {
+    const w = num($("wtIn").value), h = $("protHint");
+    if (!w) { h.textContent = "Add your weight to get a protein target. For PCOD and fat loss, aim higher than usual — protein protects muscle and blunts hunger."; return; }
+    const sug = Math.round(w * 1.4);
+    h.replaceChildren(document.createTextNode("For fat loss with PCOD, ~1.4 g per kg is a good target: "), el("b", { text: sug + " g", id: "applyProt" }), document.createTextNode(" — tap to use it."));
+    $("applyProt").onclick = () => { $("protIn").value = sug; onSettings(); };
+  }
+
   const go = (n) => { const d = addDays(state.date, n); if (d > state.today) return; state.date = d; render(); watch(); };
   $("prevDay").onclick = () => go(-1);
   $("nextDay").onclick = () => go(1);
 
   function applySettings(s) {
-    if (s) state.settings = { goal: num(s.goal) || 2000, protein: num(s.protein) || 90 };
-    $("goalIn").value = state.settings.goal; $("protIn").value = state.settings.protein;
+    if (s) state.settings = {
+      goal: num(s.goal) || 2000, protein: num(s.protein) || 90, fiber: num(s.fiber) || 30,
+      weight: num(s.weight), diet: s.diet || "lacto", cuisine: s.cuisine || "both", notes: s.notes || "",
+    };
+    const v = state.settings;
+    $("goalIn").value = v.goal; $("protIn").value = v.protein; $("fibIn").value = v.fiber;
+    $("wtIn").value = v.weight || ""; $("dietIn").value = v.diet; $("cuisineIn").value = v.cuisine; $("notesIn").value = v.notes;
+    renderProtHint();
   }
 
   // ---------- boot ----------
