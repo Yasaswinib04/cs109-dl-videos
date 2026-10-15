@@ -1,0 +1,11 @@
+{
+  "name": "expense-tracker",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Parse Indian bank/card/UPI alert messages into a monthly expense tracker.",
+  "scripts": {
+    "test": "node --test test/",
+    "build": "node build.mjs"
+  }
+}
