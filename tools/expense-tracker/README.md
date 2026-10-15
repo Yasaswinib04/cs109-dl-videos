@@ -133,13 +133,28 @@ and `build.mjs` flattens them into the published page.
 ## Use
 
 ```sh
-npm test     # 67 tests, no dependencies
+npm test      # 73 tests, no dependencies
 npm run build # -> dist/tracker.html, a self-contained page
 ```
 
 `dist/tracker.html` opens standalone in any browser (storing data in that
 browser). Published as an Artifact it stores data with the page instead, so it
 persists across devices.
+
+### Each month
+
+1. Download last month's statement from net banking as CSV or Excel.
+2. Open the tracker, **Import**, pick the file. Check the column mapping it
+   guessed, then look at the balance verdict before going further: if the
+   closing balance does not follow from the opening balance plus the rows, the
+   export is short and nothing downstream is trustworthy.
+3. **Tidy up** — the ride suggestion, then the repeat-payee groups. Each
+   decision you make there is remembered, so this shrinks every month.
+4. **Month** for the totals, **Trends** for the shape over time.
+
+A re-import of a month already loaded is safe: rows are matched on their bank
+reference, and failing that on date, amount and account, so the same statement
+imported twice yields one ledger, not two.
 
 ## Getting messages off an Android phone
 
