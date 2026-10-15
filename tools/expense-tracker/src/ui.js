@@ -186,15 +186,24 @@ function guessAccountMeta(rows, headerRow, filename) {
   };
 }
 
+/**
+ * What a bank calls a spreadsheet is decided by its bytes, not its extension:
+ * several Indian banks export an HTML table and name it ".xls".
+ */
 async function readSpreadsheet(file) {
   if (/\.csv$/i.test(file.name)) return parseCsv(await file.text());
-  if (typeof XLSX === 'undefined') {
-    toast('Excel support did not load. Re-download the statement as CSV.');
-    return null;
+
+  const bytes = new Uint8Array(await file.arrayBuffer());
+  const head = new TextDecoder().decode(bytes.subarray(0, 2048));
+
+  if (looksLikeHtml(head)) {
+    const rows = readHtmlTable(new TextDecoder().decode(bytes));
+    if (!rows) throw new Error('empty');
+    return rows;
   }
-  const wb = XLSX.read(await file.arrayBuffer(), { type: 'array', cellDates: true });
-  const sheet = wb.Sheets[wb.SheetNames[0]];
-  return XLSX.utils.sheet_to_json(sheet, { header: 1, raw: true, defval: '' });
+  if (bytes[0] === 0x50 && bytes[1] === 0x4b) return readXlsx(bytes.buffer);
+  if (bytes[0] === 0xd0 && bytes[1] === 0xcf) throw new Error('biff');
+  return parseCsv(new TextDecoder().decode(bytes));   // a CSV misnamed .xls
 }
 
 /** Show what was found and let it be corrected before anything is imported. */
@@ -856,17 +865,27 @@ el('file-input').addEventListener('change', async e => {
   const f = e.target.files[0];
   if (!f) return;
   try {
+    const isCsv = /\.csv$/i.test(f.name);
     if (/\.(xlsx?|csv)$/i.test(f.name)) {
       const rows = await readSpreadsheet(f);
-      if (rows) {
+      if (rows && rows.length) {
         const layout = detectLayout(rows);
         if (layout.headerRow !== -1) { openStatementStep(rows, layout, f.name); e.target.value = ''; return; }
       }
-      // A CSV with no statement header is probably an export of messages.
+      // A CSV with no statement header is probably an export of messages, so
+      // it is worth a second try as text. A workbook is not: reading one as
+      // text yields binary noise and an error naming the wrong problem.
+      if (!isCsv) {
+        toast('Read that file, but found no statement header row in it.');
+        e.target.value = '';
+        return;
+      }
     }
     await importText(await f.text(), f.name);
   } catch (err) {
-    toast('Could not read that file. CSV or Excel statements work best.');
+    toast(err && err.message === 'biff'
+      ? 'That is an old binary .xls. Re-download it as .xlsx or CSV and it will import.'
+      : 'Could not read that file. CSV or Excel statements work best.');
   }
   e.target.value = '';
 });

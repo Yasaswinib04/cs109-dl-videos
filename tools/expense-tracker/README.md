@@ -133,7 +133,7 @@ and `build.mjs` flattens them into the published page.
 ## Use
 
 ```sh
-npm test      # 73 tests, no dependencies
+npm test      # 84 tests, no dependencies
 npm run build # -> dist/tracker.html, a self-contained page
 ```
 
@@ -166,6 +166,17 @@ imported twice yields one ledger, not two.
 
 Google Takeout does not include SMS, and `adb backup` no longer works on current
 Android — the backup app is the practical route.
+
+## Reading what the bank actually sends
+
+Spreadsheets are parsed in `src/workbook.js`, with no library and no network:
+`.xlsx` is a zip of XML, which `DecompressionStream` opens unaided, and the
+`.xls` that several Indian banks export is not Excel at all but an HTML table
+wearing the extension. The format is decided by the file's first bytes, never
+by its name.
+
+A genuine binary BIFF8 `.xls` is refused outright, with a message saying to
+re-download as `.xlsx` or CSV. Half-reading one would be worse than saying so.
 
 ## Adding a bank
 
